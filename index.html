@@ -1,0 +1,1845 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Sweep Manager</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#0d1117;color:#e1e4e8;height:100vh;display:flex;overflow:hidden}
+
+/* ── SIDEBAR ── */
+#sidebar{width:230px;min-width:230px;background:#161b22;border-right:1px solid #30363d;display:flex;flex-direction:column;overflow:hidden}
+#sidebar-header{padding:14px 16px;border-bottom:1px solid #30363d;display:flex;align-items:center;gap:10px;background:#0d1117}
+.logo{width:34px;height:34px;background:linear-gradient(135deg,#1f6feb,#388bfd);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0}
+#sidebar-header h1{font-size:15px;font-weight:800;color:#c9d1d9;line-height:1.2;letter-spacing:0.3px}
+#venue-tree{flex:1;overflow-y:auto;padding:6px 0}
+.venue-group{margin-bottom:2px}
+.venue-header{padding:8px 14px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.8px;color:#8b949e;cursor:pointer;display:flex;align-items:center;gap:8px;user-select:none}
+.venue-header:hover{color:#c9d1d9;background:#21262d}
+.venue-arrow{font-size:8px;transition:transform 0.2s;display:inline-block}
+.venue-header.open .venue-arrow{transform:rotate(90deg)}
+.venue-name{flex:1}
+.venue-count{font-size:10px;background:#21262d;padding:1px 6px;border-radius:10px}
+.floor-list{display:none}
+.floor-list.open{display:block}
+.floor-item{padding:6px 14px 6px 30px;font-size:12px;color:#8b949e;cursor:pointer;display:flex;align-items:center;border-left:2px solid transparent;transition:all 0.12s}
+.floor-item:hover{color:#c9d1d9;background:#21262d}
+.floor-item.active{color:#58a6ff;background:#21262d;border-left-color:#58a6ff}
+.floor-item-name{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.floor-cp-count{font-size:10px;background:#21262d;padding:1px 5px;border-radius:8px;color:#8b949e}
+.floor-item.active .floor-cp-count{background:#1f3a5f;color:#58a6ff}
+#sidebar-legend{border-top:1px solid #30363d;padding:12px 14px}
+#sidebar-legend h3{font-size:10px;text-transform:uppercase;letter-spacing:0.5px;color:#8b949e;margin-bottom:8px}
+.legend-item{display:flex;align-items:center;gap:7px;margin-bottom:5px;font-size:11px;color:#8b949e}
+.legend-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0}
+
+/* ── MAIN ── */
+#main{flex:1;display:flex;flex-direction:column;overflow:hidden;min-width:0}
+#toolbar{padding:10px 16px;background:#161b22;border-bottom:1px solid #30363d;display:flex;align-items:center;gap:10px;flex-shrink:0}
+#toolbar-title{font-size:14px;font-weight:600;color:#c9d1d9;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#mode-badge{font-size:11px;color:#f0883e;padding:3px 9px;background:rgba(240,136,62,0.12);border-radius:4px;border:1px solid rgba(240,136,62,0.3);white-space:nowrap;display:none}
+.btn{padding:6px 13px;border:none;border-radius:6px;cursor:pointer;font-size:12px;font-weight:500;transition:all 0.12s;white-space:nowrap}
+.btn-add{background:#238636;color:#fff}
+.btn-add:hover{background:#2ea043}
+.btn-add.cancel{background:#da3633}
+.btn-add.cancel:hover{background:#f85149}
+.btn-sec{background:#21262d;color:#c9d1d9;border:1px solid #30363d}
+.btn-sec:hover{background:#30363d}
+.btn-danger{background:rgba(218,54,51,0.1);color:#f85149;border:1px solid rgba(218,54,51,0.35)}
+.btn-danger:hover{background:#da3633;color:#fff}
+
+#map-area{flex:1;position:relative;overflow:auto;background:#111}
+#map-container{position:relative;display:inline-block;min-width:100%;min-height:100%}
+#map-display{display:flex;align-items:flex-start;justify-content:flex-start}
+#map-display img{display:block;max-width:100%;height:auto;user-select:none;-webkit-user-drag:none}
+#map-display object,#map-display iframe{display:block;border:none}
+#cp-overlay{position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:5}
+#cp-overlay.adding{pointer-events:all;cursor:crosshair}
+
+#no-map{width:100%;height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;color:#484f58;gap:12px;font-size:14px;position:absolute;top:0;left:0}
+.no-map-icon{font-size:56px;line-height:1}
+
+/* ── CHECKPOINT MARKERS ── */
+.cp-marker{position:absolute;transform:translate(-50%,-100%);cursor:grab;pointer-events:all;z-index:10;transition:transform 0.12s,filter 0.12s}
+.cp-marker:hover{z-index:20;filter:drop-shadow(0 0 8px rgba(255,255,255,0.5));transform:translate(-50%,-100%) scale(1.15)}
+.cp-marker.selected{z-index:20;filter:drop-shadow(0 0 10px rgba(255,255,255,0.6));transform:translate(-50%,-100%) scale(1.2)}
+.cp-marker.dragging{z-index:30;cursor:grabbing;opacity:0.9;transition:none;filter:drop-shadow(0 4px 12px rgba(0,0,0,0.8))}
+.cp-tooltip{position:absolute;bottom:calc(100% + 4px);left:50%;transform:translateX(-50%);background:#161b22;color:#c9d1d9;font-size:10px;white-space:nowrap;padding:4px 8px;border-radius:4px;border:1px solid #30363d;pointer-events:none;opacity:0;transition:opacity 0.12s;box-shadow:0 2px 8px rgba(0,0,0,0.5)}
+.cp-marker:hover .cp-tooltip,.cp-marker.selected .cp-tooltip{opacity:1}
+
+/* ── STATS BAR ── */
+#stats-bar{padding:6px 14px;background:#0d1117;border-top:1px solid #21262d;display:flex;gap:14px;font-size:11px;color:#8b949e;flex-shrink:0;flex-wrap:wrap}
+.stat{display:flex;align-items:center;gap:5px}
+.stat-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0}
+
+/* ── RIGHT PANEL ── */
+#panel{width:280px;min-width:280px;background:#161b22;border-left:1px solid #30363d;display:flex;flex-direction:column;overflow:hidden}
+#panel-tabs{display:flex;border-bottom:1px solid #30363d;flex-shrink:0}
+.ptab{flex:1;padding:11px;text-align:center;font-size:12px;font-weight:500;cursor:pointer;color:#8b949e;border-bottom:2px solid transparent;transition:all 0.12s}
+.ptab:hover{color:#c9d1d9}
+.ptab.active{color:#58a6ff;border-bottom-color:#58a6ff}
+#panel-content{flex:1;overflow-y:auto;padding:10px}
+
+/* ── CHECKPOINT LIST ── */
+.cp-list-section-label{font-size:10px;text-transform:uppercase;letter-spacing:0.5px;color:#8b949e;display:flex;align-items:center;gap:6px;margin:10px 0 5px}
+.cp-card{padding:8px 10px;border-radius:6px;margin-bottom:4px;background:#21262d;cursor:pointer;border:1px solid #30363d;transition:all 0.12s}
+.cp-card:hover{border-color:#58a6ff26;background:#1c2128}
+.cp-card.selected{border-color:#58a6ff;background:#1f3a5f}
+.cp-card-header{display:flex;align-items:center;gap:7px;margin-bottom:3px}
+.cp-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.cp-card-name{font-size:12px;font-weight:500;color:#c9d1d9;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pri-badge{font-size:9px;padding:1px 5px;border-radius:3px;font-weight:700;flex-shrink:0}
+.pri-High{background:rgba(248,81,73,0.2);color:#f85149}
+.pri-Medium{background:rgba(227,179,65,0.2);color:#e3b341}
+.pri-Low{background:rgba(63,185,80,0.2);color:#3fb950}
+.cp-card-meta{font-size:10px;color:#8b949e;display:flex;gap:6px}
+
+/* ── EDIT FORM ── */
+.form-section-title{font-size:13px;font-weight:600;color:#c9d1d9;margin-bottom:12px;display:flex;align-items:center;gap:8px}
+.fg{margin-bottom:11px}
+.flabel{display:block;font-size:10px;font-weight:600;color:#8b949e;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px}
+.finput,.fselect,.ftextarea{width:100%;padding:7px 9px;background:#0d1117;border:1px solid #30363d;border-radius:5px;color:#c9d1d9;font-size:12px;font-family:inherit;transition:border-color 0.12s}
+.finput:focus,.fselect:focus,.ftextarea:focus{outline:none;border-color:#58a6ff}
+.ftextarea{resize:vertical;min-height:55px}
+.fselect option{background:#161b22}
+.form-row{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.form-actions{display:flex;gap:7px;margin-top:14px}
+.btn-save{flex:1;background:#238636;color:#fff;border:none;padding:7px;border-radius:6px;cursor:pointer;font-size:12px;font-weight:500}
+.btn-save:hover{background:#2ea043}
+.form-meta{font-size:10px;color:#484f58;margin-top:10px;text-align:center;line-height:1.6}
+
+/* ── EMPTY STATE ── */
+.empty{text-align:center;padding:30px 16px;color:#484f58}
+.empty-icon{font-size:36px;margin-bottom:10px}
+.empty p{font-size:12px;line-height:1.6}
+
+/* ── PATROL ── */
+#patrol-bar{padding:8px 16px;background:#0a1628;border-bottom:1px solid #1f3a5f;display:none;align-items:center;gap:10px;flex-shrink:0}
+#patrol-bar.active{display:flex}
+.patrol-pulse{width:10px;height:10px;border-radius:50%;background:#3fb950;animation:pulse 1.4s ease-in-out infinite;flex-shrink:0}
+@keyframes pulse{0%,100%{box-shadow:0 0 0 0 rgba(63,185,80,0.6)}50%{box-shadow:0 0 0 6px rgba(63,185,80,0)}}
+#patrol-bar-info{flex:1;font-size:12px;color:#79c0ff}
+#patrol-bar-info strong{color:#c9d1d9}
+.btn-end-patrol{background:rgba(218,54,51,0.15);color:#f85149;border:1px solid rgba(218,54,51,0.4);padding:5px 12px;border-radius:5px;cursor:pointer;font-size:12px;font-weight:600}
+.btn-end-patrol:hover{background:#da3633;color:#fff}
+.btn-start-patrol{background:rgba(63,185,80,0.12);color:#3fb950;border:1px solid rgba(63,185,80,0.4);padding:6px 13px;border-radius:6px;cursor:pointer;font-size:12px;font-weight:600}
+.btn-start-patrol:hover{background:#238636;color:#fff;border-color:#238636}
+/* patrol checklist */
+.patrol-header{background:#0d1117;border:1px solid #21262d;border-radius:6px;padding:10px 12px;margin-bottom:10px}
+.patrol-header-title{font-size:12px;font-weight:700;color:#79c0ff;margin-bottom:6px;display:flex;align-items:center;gap:7px}
+.patrol-meta{font-size:11px;color:#8b949e;display:flex;flex-direction:column;gap:3px}
+.patrol-progress{height:4px;background:#21262d;border-radius:2px;margin-top:8px;overflow:hidden}
+.patrol-progress-fill{height:100%;background:linear-gradient(90deg,#3fb950,#58a6ff);border-radius:2px;transition:width 0.4s}
+.cp-patrol-item{border:1px solid #30363d;border-radius:6px;margin-bottom:5px;overflow:hidden;background:#21262d}
+.cp-patrol-item.logged-Clear{border-color:#1a3a1a;background:#0d2010}
+.cp-patrol-item.logged-Issue{border-color:#3a1a1a;background:#200d0d}
+.cp-patrol-item.logged-Skipped{border-color:#2a2a1a;background:#1a1a0d}
+.cp-patrol-row{display:flex;align-items:center;gap:8px;padding:8px 10px;cursor:pointer}
+.cp-patrol-status{width:20px;height:20px;border-radius:50%;border:2px solid #484f58;display:flex;align-items:center;justify-content:center;font-size:11px;flex-shrink:0;transition:all 0.15s}
+.logged-Clear  .cp-patrol-status{background:#1a3a1a;border-color:#3fb950;color:#3fb950}
+.logged-Issue  .cp-patrol-status{background:#3a1a1a;border-color:#f85149;color:#f85149}
+.logged-Skipped .cp-patrol-status{background:#2a2a1a;border-color:#e3b341;color:#e3b341}
+.cp-patrol-name{flex:1;font-size:12px;color:#c9d1d9;font-weight:500}
+.cp-patrol-time{font-size:10px;color:#8b949e;white-space:nowrap}
+.cp-patrol-form{padding:0 10px 10px;border-top:1px solid #30363d;display:none}
+.cp-patrol-form.open{display:block}
+.pf-row{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-top:8px}
+.pf-status-btns{display:flex;gap:5px;margin-top:8px}
+.pf-status-btn{flex:1;padding:5px;border-radius:5px;border:1px solid #30363d;background:#0d1117;color:#8b949e;cursor:pointer;font-size:11px;font-weight:600;transition:all 0.12s}
+.pf-status-btn:hover{border-color:#58a6ff;color:#58a6ff}
+.pf-status-btn.sel-Clear{background:#0d2010;border-color:#3fb950;color:#3fb950}
+.pf-status-btn.sel-Issue{background:#200d0d;border-color:#f85149;color:#f85149}
+.pf-status-btn.sel-Skipped{background:#1a1a0d;border-color:#e3b341;color:#e3b341}
+.btn-save-log{width:100%;margin-top:8px;padding:7px;background:#238636;color:#fff;border:none;border-radius:5px;cursor:pointer;font-size:12px;font-weight:600}
+.btn-save-log:hover{background:#2ea043}
+/* patrol history */
+.history-patrol{border:1px solid #30363d;border-radius:6px;margin-bottom:8px;overflow:hidden}
+.history-patrol-header{padding:10px 12px;cursor:pointer;display:flex;align-items:center;gap:8px;background:#21262d}
+.history-patrol-header:hover{background:#2d333b}
+.history-info{flex:1;min-width:0}
+.history-title{font-size:12px;font-weight:600;color:#c9d1d9;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.history-sub{font-size:10px;color:#8b949e;margin-top:2px}
+.history-badge{font-size:10px;padding:2px 7px;border-radius:10px;background:#1f3a5f;color:#79c0ff;white-space:nowrap}
+.history-entries{display:none;border-top:1px solid #30363d}
+.history-entries.open{display:block}
+.history-entry{padding:8px 12px;border-bottom:1px solid #21262d;display:flex;gap:8px;align-items:flex-start}
+.history-entry:last-child{border-bottom:none}
+.he-status{width:18px;height:18px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:10px;flex-shrink:0;margin-top:1px}
+.he-Clear{background:#0d2010;color:#3fb950}
+.he-Issue{background:#200d0d;color:#f85149}
+.he-Skipped{background:#1a1a0d;color:#e3b341}
+.he-body{flex:1;min-width:0}
+.he-name{font-size:11px;font-weight:600;color:#c9d1d9}
+.he-time{font-size:10px;color:#8b949e}
+.he-notes{font-size:10px;color:#8b949e;margin-top:2px;font-style:italic}
+.history-export{display:block;width:100%;margin-top:8px;padding:6px;background:#21262d;border:1px solid #30363d;border-radius:5px;color:#8b949e;cursor:pointer;font-size:11px;font-weight:500}
+.history-export:hover{background:#30363d;color:#c9d1d9}
+
+/* ── ADD VENUE / FLOOR SIDEBAR BUTTONS ── */
+#sidebar-add-venue{padding:10px 14px;border-top:1px solid #30363d;flex-shrink:0}
+.btn-add-venue{width:100%;padding:7px;background:transparent;border:1px dashed #30363d;border-radius:6px;color:#8b949e;cursor:pointer;font-size:12px;font-weight:500;transition:all 0.15s;text-align:center}
+.btn-add-venue:hover{border-color:#58a6ff;color:#58a6ff;background:#1f3a5f22}
+.venue-actions{display:flex;gap:4px;margin-left:auto}
+.venue-action-btn{background:none;border:none;color:#484f58;cursor:pointer;font-size:11px;padding:2px 4px;border-radius:3px;line-height:1}
+.venue-action-btn:hover{color:#c9d1d9;background:#30363d}
+.floor-actions{display:flex;gap:2px;margin-left:4px}
+.floor-action-btn{background:none;border:none;color:#484f58;cursor:pointer;font-size:10px;padding:1px 3px;border-radius:3px;line-height:1}
+.floor-action-btn:hover{color:#f85149}
+.btn-add-floor{display:flex;align-items:center;gap:6px;padding:5px 14px 5px 30px;font-size:11px;color:#484f58;cursor:pointer;transition:all 0.12s;border:none;background:none;width:100%;text-align:left}
+.btn-add-floor:hover{color:#58a6ff}
+/* ── MODAL ── */
+#modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:1000;display:none;align-items:center;justify-content:center}
+#modal-overlay.open{display:flex}
+.modal{background:#161b22;border:1px solid #30363d;border-radius:10px;width:420px;max-width:90vw;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,0.6)}
+.modal-header{padding:16px 20px 12px;border-bottom:1px solid #30363d;display:flex;align-items:center;justify-content:space-between}
+.modal-header h2{font-size:14px;font-weight:700;color:#c9d1d9}
+.modal-close{background:none;border:none;color:#8b949e;cursor:pointer;font-size:18px;line-height:1;padding:0}
+.modal-close:hover{color:#c9d1d9}
+.modal-body{padding:20px}
+.modal-footer{padding:12px 20px;border-top:1px solid #30363d;display:flex;gap:8px;justify-content:flex-end}
+.modal-btn{padding:7px 16px;border-radius:6px;cursor:pointer;font-size:13px;font-weight:500;border:none}
+.modal-btn-cancel{background:#21262d;color:#c9d1d9;border:1px solid #30363d}
+.modal-btn-cancel:hover{background:#30363d}
+.modal-btn-primary{background:#238636;color:#fff}
+.modal-btn-primary:hover{background:#2ea043}
+.file-drop{border:2px dashed #30363d;border-radius:8px;padding:28px 16px;text-align:center;cursor:pointer;transition:all 0.15s;position:relative;background:#0d1117}
+.file-drop:hover,.file-drop.drag-over{border-color:#58a6ff;background:#1f3a5f22}
+.file-drop input[type=file]{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%}
+.file-drop-icon{font-size:32px;margin-bottom:8px}
+.file-drop-text{font-size:13px;color:#8b949e}
+.file-drop-hint{font-size:11px;color:#484f58;margin-top:4px}
+.file-selected{font-size:12px;color:#3fb950;margin-top:8px;font-weight:500}
+
+/* ── OFFICERS SIDEBAR ── */
+#sidebar-officers{border-top:1px solid #30363d;padding:10px 14px;flex-shrink:0}
+#sidebar-officers h3{font-size:10px;text-transform:uppercase;letter-spacing:0.5px;color:#8b949e;margin-bottom:7px;display:flex;align-items:center;justify-content:space-between;gap:6px}
+#sidebar-officers h3 span{flex:1}
+.officer-list-inner{display:flex;flex-direction:column;gap:3px;margin-bottom:6px;max-height:110px;overflow-y:auto}
+.officer-item{display:flex;align-items:center;gap:6px;padding:4px 7px;border-radius:4px;background:#21262d;font-size:11px;color:#c9d1d9}
+.officer-item-name{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.officer-del-btn{background:none;border:none;color:#484f58;cursor:pointer;font-size:11px;padding:1px 3px;border-radius:3px;line-height:1;flex-shrink:0}
+.officer-del-btn:hover{color:#f85149}
+.btn-add-officer{width:100%;padding:5px;background:transparent;border:1px dashed #30363d;border-radius:5px;color:#8b949e;cursor:pointer;font-size:11px;transition:all 0.15s;text-align:center}
+.btn-add-officer:hover{border-color:#58a6ff;color:#58a6ff}
+/* multi-officer patrol select */
+.officer-checklist{display:flex;flex-direction:column;gap:4px;max-height:160px;overflow-y:auto;padding:2px 0}
+.officer-check-item{display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:5px;background:#21262d;cursor:pointer;border:1px solid #30363d;transition:all 0.12s;user-select:none}
+.officer-check-item:hover{border-color:#58a6ff44;background:#1c2128}
+.officer-check-item input[type=checkbox]{accent-color:#58a6ff;width:14px;height:14px;cursor:pointer;flex-shrink:0}
+.officer-check-item label{font-size:12px;color:#c9d1d9;cursor:pointer;flex:1}
+
+/* ── SCROLLBAR ── */
+::-webkit-scrollbar{width:5px;height:5px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:#30363d;border-radius:3px}
+::-webkit-scrollbar-thumb:hover{background:#484f58}
+</style>
+</head>
+<body>
+
+<!-- SIDEBAR -->
+<div id="sidebar">
+  <div id="sidebar-header">
+    <div class="logo">🛡</div>
+    <h1>Sweep Manager</h1>
+  </div>
+  <div id="venue-tree"></div>
+  <div id="sidebar-add-venue">
+    <button class="btn-add-venue" onclick="openVenueModal()">＋ Add Venue</button>
+    <button class="btn-add-venue" id="btn-restore-venues" onclick="restoreVenues()" style="margin-top:5px;display:none;border-color:#e3b341;color:#e3b341">↺ Restore Hidden Venues</button>
+  </div>
+  <div id="sidebar-officers">
+    <h3><span>Officers</span><button class="btn-add-officer" style="width:auto;padding:2px 8px;font-size:10px;border-radius:4px" onclick="addOfficer()">＋ Add</button></h3>
+    <div id="officer-list-inner" class="officer-list-inner"></div>
+  </div>
+  <div id="sidebar-legend">
+    <h3>Checkpoint Types</h3>
+    <div id="legend-items"></div>
+  </div>
+</div>
+
+<!-- MAIN MAP AREA -->
+<div id="main">
+  <div id="toolbar">
+    <div id="toolbar-title">Select a venue and floor</div>
+    <span id="mode-badge">Click map to place</span>
+    <span style="font-size:11px;color:#6e7681">Drag any pin to reposition</span>
+    <button class="btn btn-sec" onclick="resetToDefaults()" title="Reset all checkpoints to AI-suggested defaults">↺ Reset</button>
+    <button class="btn btn-sec" onclick="exportCheckpoints()">Export</button>
+    <button class="btn-start-patrol" id="btn-patrol" onclick="startPatrol()" style="display:none">▶ Start Patrol</button>
+    <button class="btn btn-add" id="btn-add" onclick="toggleAddMode()">+ Add Checkpoint</button>
+  </div>
+  <!-- Active patrol status bar -->
+  <div id="patrol-bar">
+    <span class="patrol-pulse"></span>
+    <span id="patrol-bar-info"></span>
+    <button class="btn-end-patrol" onclick="endPatrol()">⏹ End Patrol</button>
+  </div>
+  <div id="map-area">
+    <div id="map-container">
+      <div id="map-display">
+        <div id="no-map"><div class="no-map-icon">🗺</div><div>Select a venue and floor to begin</div></div>
+      </div>
+      <div id="cp-overlay" onclick="handleOverlayClick(event)"></div>
+    </div>
+  </div>
+  <div id="stats-bar"></div>
+</div>
+
+<!-- RIGHT PANEL -->
+<div id="panel">
+  <div id="panel-tabs">
+    <div class="ptab active" onclick="switchTab('list')">Checkpoints</div>
+    <div class="ptab" onclick="switchTab('edit')">Edit</div>
+    <div class="ptab" onclick="switchTab('patrol')">Patrol</div>
+  </div>
+  <div id="panel-content">
+    <div class="empty"><div class="empty-icon">📍</div><p>Select a floor to view its checkpoints, or click "+ Add Checkpoint" to place one on the map.</p></div>
+  </div>
+</div>
+
+<!-- MODALS -->
+<div id="modal-overlay" onclick="closeModal(event)">
+  <div class="modal" onclick="event.stopPropagation()">
+    <div class="modal-header">
+      <h2 id="modal-title">Add Venue</h2>
+      <button class="modal-close" onclick="closeModal()">✕</button>
+    </div>
+    <div class="modal-body" id="modal-body"></div>
+    <div class="modal-footer">
+      <button class="modal-btn modal-btn-cancel" onclick="closeModal()">Cancel</button>
+      <button class="modal-btn modal-btn-primary" id="modal-confirm" onclick="modalConfirm()">Add</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ══════════════════════════════════════════
+// CONFIGURATION
+// ══════════════════════════════════════════
+
+const TYPE_COLORS = {
+  'Entry/Exit':  '#58a6ff',
+  'Screening':   '#e3b341',
+  'Patrol':      '#3fb950',
+  'Observation': '#bc8cff',
+  'Emergency':   '#f85149',
+};
+
+const VENUES = {
+  BCP: {
+    name: 'BC Place',
+    floors: {
+      'Exterior': { src: 'maps/BCP/Exterior.jpg', kind: 'image' },
+      'Level 1':  { src: 'maps/BCP/Level-1.jpg',  kind: 'image' },
+      'Level 2':  { src: 'maps/BCP/Level-2.jpg',  kind: 'image' },
+      'Level 3':  { src: 'maps/BCP/Level-3.jpg',  kind: 'image' },
+      'Level 4':  { src: 'maps/BCP/Level-4.jpg',  kind: 'image' },
+    }
+  },
+  IJKC: {
+    name: 'IJKC',
+    floors: {
+      'External Site':        { src: 'maps/IJKC/IJKC_External.PDF',        kind: 'pdf' },
+      'Loggia & Prayer Hall': { src: 'maps/IJKC/IJKC_Loggia%20Prayer.pdf', kind: 'pdf' },
+      'Lower Level':          { src: 'maps/IJKC/IJKC_Classroom.pdf',       kind: 'pdf' },
+      'Upper Level':          { src: 'maps/IJKC/IJKCF_Social%20Hall.pdf',  kind: 'pdf' },
+    }
+  },
+  VCEC: {
+    name: 'VCEC',
+    floors: {
+      'East Convention Level': { src: 'maps/VCEC/VCEC%20East%20Convention.pdf',      kind: 'pdf' },
+      'East Meeting Level':    { src: 'maps/VCEC/VCEC%20East%20Meeting%20Level.pdf', kind: 'pdf' },
+      'West Exhibition Level': { src: 'maps/VCEC/VCEC%20West%20Exhibit.pdf',         kind: 'pdf' },
+      'West Level 1':          { src: 'maps/VCEC/VCEC%20West%20Level%201.pdf',       kind: 'pdf' },
+      'West Level 2':          { src: 'maps/VCEC/VCEC%20West%20Level%202.pdf',       kind: 'pdf' },
+      'West Level 3':          { src: 'maps/VCEC/VCEC%20West%20Level%203.pdf',       kind: 'pdf' },
+    }
+  }
+};
+
+// ══════════════════════════════════════════
+// DEFAULT CHECKPOINTS (AI-analysed from maps)
+// ══════════════════════════════════════════
+
+const DEFAULTS = [
+  // ─── BCP EXTERIOR ───
+  {id:'bcp-e-1',  venue:'BCP', floor:'Exterior', x:50.0, y:85.0, name:'Gate A – South Main Entry',         type:'Entry/Exit',  priority:'High',   status:'Active', officer:'', notes:'Primary public entrance on Beatty St / Terry Fox Plaza. Bag screening and ticket check required.'},
+  {id:'bcp-e-2',  venue:'BCP', floor:'Exterior', x:22.0, y:72.0, name:'Gate B – SW Entry',                 type:'Entry/Exit',  priority:'High',   status:'Active', officer:'', notes:'Expo Blvd SW pedestrian entrance. Ticket validation point.'},
+  {id:'bcp-e-3',  venue:'BCP', floor:'Exterior', x:10.0, y:50.0, name:'Gate C – West Entry + Security HQ', type:'Entry/Exit',  priority:'High',   status:'Active', officer:'', notes:'Security / Lost & Found office at street level on Griffiths Way. Highest-priority west perimeter post.'},
+  {id:'bcp-e-4',  venue:'BCP', floor:'Exterior', x:22.0, y:28.0, name:'Gate D – NW Entry',                 type:'Entry/Exit',  priority:'High',   status:'Active', officer:'', notes:'Northwest entrance near parking ramp. Ticket and credential check.'},
+  {id:'bcp-e-5',  venue:'BCP', floor:'Exterior', x:50.0, y:12.0, name:'Gate E – North Entry',              type:'Entry/Exit',  priority:'High',   status:'Active', officer:'', notes:'Pacific Blvd side. Pedestrian overpass access and BC Place Admin street-level entry.'},
+  {id:'bcp-e-6',  venue:'BCP', floor:'Exterior', x:72.0, y:28.0, name:'Gate F – NE Entry',                 type:'Entry/Exit',  priority:'High',   status:'Active', officer:'', notes:'Adjacent to Hotel & Casino. Monitor pedestrian flow from Smithe St.'},
+  {id:'bcp-e-7',  venue:'BCP', floor:'Exterior', x:88.0, y:50.0, name:'Gate G – East Entry',               type:'Entry/Exit',  priority:'High',   status:'Active', officer:'', notes:'East entrance near Terry Fox Way. Suite access corridor nearby.'},
+  {id:'bcp-e-8',  venue:'BCP', floor:'Exterior', x:72.0, y:70.0, name:'Gate H – SE Entry',                 type:'Entry/Exit',  priority:'High',   status:'Active', officer:'', notes:'Expo Blvd SE. Suite and ticket booth access. VIP lane management needed.'},
+  {id:'bcp-e-9',  venue:'BCP', floor:'Exterior', x:18.0, y:38.0, name:'Parking Lot Perimeter Patrol',      type:'Patrol',      priority:'Medium', status:'Active', officer:'', notes:'Circular sweep of NW parking lot. Monitor ramp access and vehicle flow.'},
+  {id:'bcp-e-10', venue:'BCP', floor:'Exterior', x:64.0, y:10.0, name:'Accessible Entrance',               type:'Screening',   priority:'Medium', status:'Active', officer:'', notes:'Pickup/drop-off beneath staircase. Keep access lane clear. Coordinate with gate staff.'},
+
+  // ─── BCP LEVEL 1 ───
+  {id:'bcp-1-1', venue:'BCP', floor:'Level 1', x:74.0, y:50.0, name:'East Concourse Patrol (Sec 1)',  type:'Patrol',    priority:'Medium', status:'Active', officer:'', notes:'Terry Fox Way concourse. Patrol Sec 1 area and West Field perimeter.'},
+  {id:'bcp-1-2', venue:'BCP', floor:'Level 1', x:26.0, y:50.0, name:'West Concourse Patrol (Sec 28)', type:'Patrol',    priority:'Medium', status:'Active', officer:'', notes:'Griffiths Way side. Monitor Sec 28 area and East Field perimeter.'},
+  {id:'bcp-1-3', venue:'BCP', floor:'Level 1', x:50.0, y:16.0, name:'North Concourse / Seat Annex',   type:'Patrol',    priority:'Medium', status:'Active', officer:'', notes:'Pacific Blvd side. Monitor Seat Annex zones and Sec 37-43 corridor.'},
+  {id:'bcp-1-4', venue:'BCP', floor:'Level 1', x:50.0, y:75.0, name:'South Food Courts',              type:'Observation',priority:'Medium', status:'Active', officer:'', notes:'Dual food court zones (high crowd density). Post stationary observation officer.'},
+  {id:'bcp-1-5', venue:'BCP', floor:'Level 1', x:50.0, y:50.0, name:'Field Level Access Control',     type:'Screening', priority:'High',   status:'Active', officer:'', notes:'Restrict field access to credentialed staff only. Hard barricade between Sec 12 and Sec 21.'},
+
+  // ─── BCP LEVEL 2 ───
+  {id:'bcp-2-1', venue:'BCP', floor:'Level 2', x:10.0, y:50.0, name:'Gate C Entrance (L2)',               type:'Entry/Exit', priority:'High',   status:'Active', officer:'', notes:'Main concourse entry. Ticket scan, bag screen. Highest volume west gate.'},
+  {id:'bcp-2-2', venue:'BCP', floor:'Level 2', x:22.0, y:20.0, name:'Gate D Entrance (L2)',               type:'Entry/Exit', priority:'High',   status:'Active', officer:'', notes:'NW concourse gate. Ticket validation.'},
+  {id:'bcp-2-3', venue:'BCP', floor:'Level 2', x:48.0, y:8.0,  name:'Gate E Entrance (L2)',               type:'Entry/Exit', priority:'High',   status:'Active', officer:'', notes:'North gate, highest traffic. Multiple screeners required. WC and BF nearby.'},
+  {id:'bcp-2-4', venue:'BCP', floor:'Level 2', x:72.0, y:20.0, name:'Gate F Entrance (L2)',               type:'Entry/Exit', priority:'High',   status:'Active', officer:'', notes:'NE concourse gate. Ticket check.'},
+  {id:'bcp-2-5', venue:'BCP', floor:'Level 2', x:88.0, y:50.0, name:'Gate G Entrance (L2)',               type:'Entry/Exit', priority:'High',   status:'Active', officer:'', notes:'East concourse entry.'},
+  {id:'bcp-2-6', venue:'BCP', floor:'Level 2', x:8.0,  y:44.0, name:'Overhead Door / Service Access',     type:'Screening',  priority:'High',   status:'Active', officer:'', notes:'Overhead door on west wall. Restrict to credentialed show staff only.'},
+  {id:'bcp-2-7', venue:'BCP', floor:'Level 2', x:50.0, y:52.0, name:'Concourse Patrol (Secs 213-240)',    type:'Patrol',     priority:'Medium', status:'Active', officer:'', notes:'Main concourse loop. Monitor crowd flow between sections and concession areas.'},
+
+  // ─── BCP LEVEL 3 ───
+  {id:'bcp-3-1', venue:'BCP', floor:'Level 3', x:48.0, y:88.0, name:'Gate A Entrance (L3)',            type:'Entry/Exit', priority:'High',   status:'Active', officer:'', notes:'Primary south entrance. Adjacent to BC Sports Hall of Fame and ticket booths.'},
+  {id:'bcp-3-2', venue:'BCP', floor:'Level 3', x:18.0, y:78.0, name:'Gate B Entrance (L3)',            type:'Entry/Exit', priority:'High',   status:'Active', officer:'', notes:'SW entrance via Level 3 ramp from Expo Blvd.'},
+  {id:'bcp-3-3', venue:'BCP', floor:'Level 3', x:78.0, y:85.0, name:'Gate H – Suite Entrance',         type:'Entry/Exit', priority:'High',   status:'Active', officer:'', notes:'VIP suite entrance. Credential-only access. Verify suite passes.'},
+  {id:'bcp-3-4', venue:'BCP', floor:'Level 3', x:50.0, y:80.0, name:'Media A/B & BC Place Suite',      type:'Screening',  priority:'High',   status:'Active', officer:'', notes:'Media A, Media B, Skybox, BC Place Suite access corridor. Media credentials required.'},
+  {id:'bcp-3-5', venue:'BCP', floor:'Level 3', x:66.0, y:16.0, name:'SE/SW Club Lounge Access',        type:'Screening',  priority:'Medium', status:'Active', officer:'', notes:'Southeast & Southwest Lounge entry. Club pass verification required.'},
+  {id:'bcp-3-6', venue:'BCP', floor:'Level 3', x:28.0, y:50.0, name:'Edgewater Lounge Monitor',        type:'Observation',priority:'Medium', status:'Active', officer:'', notes:'Edgewater Lounge east side. Monitor patron flow and lounge perimeter.'},
+  {id:'bcp-3-7', venue:'BCP', floor:'Level 3', x:50.0, y:50.0, name:'Bowl Level Patrol (Secs 201-254)',type:'Patrol',     priority:'Medium', status:'Active', officer:'', notes:'Lower bowl concourse loop covering all numbered seating sections.'},
+
+  // ─── BCP LEVEL 4 ───
+  {id:'bcp-4-1', venue:'BCP', floor:'Level 4', x:50.0, y:14.0, name:'North Ramp / Concourse Entry (L4)', type:'Entry/Exit', priority:'Medium', status:'Active', officer:'', notes:'Ramp access to upper bowl from north concourse.'},
+  {id:'bcp-4-2', venue:'BCP', floor:'Level 4', x:12.0, y:50.0, name:'West Concourse Patrol (Secs 421-431)',type:'Patrol', priority:'Medium', status:'Active', officer:'', notes:'Upper bowl west sweep. Monitor ramp access.'},
+  {id:'bcp-4-3', venue:'BCP', floor:'Level 4', x:88.0, y:50.0, name:'East Concourse Patrol (Secs 401-410)',type:'Patrol', priority:'Medium', status:'Active', officer:'', notes:'Upper bowl east sweep.'},
+  {id:'bcp-4-4', venue:'BCP', floor:'Level 4', x:50.0, y:83.0, name:'South Concourse Patrol (Secs 410-421)',type:'Patrol',priority:'Medium', status:'Active', officer:'', notes:'Upper bowl south. Monitor south ramp and concourse exits.'},
+  {id:'bcp-4-5', venue:'BCP', floor:'Level 4', x:50.0, y:16.0, name:'North Concourse (Secs 437-445)',   type:'Patrol',     priority:'Medium', status:'Active', officer:'', notes:'Upper bowl north sweep. Monitor Sec 437-445 and BE/LG amenity areas.'},
+
+  // ─── IJKC EXTERNAL ───
+  {id:'ijkc-e-1', venue:'IJKC', floor:'External Site', x:50.0, y:8.0,  name:'Main Parking Lot Entrance', type:'Entry/Exit', priority:'High',   status:'Active', officer:'', notes:'Primary vehicle access from street. Check credentials and manage traffic flow during events.'},
+  {id:'ijkc-e-2', venue:'IJKC', floor:'External Site', x:38.0, y:50.0, name:'Portal – Front Entrance',   type:'Screening',  priority:'High',   status:'Active', officer:'', notes:'Main pedestrian portal into building. Primary bag screening and credential check point.'},
+  {id:'ijkc-e-3', venue:'IJKC', floor:'External Site', x:60.0, y:40.0, name:'Loading Ramp (North)',       type:'Screening',  priority:'High',   status:'Active', officer:'', notes:'Service and delivery vehicle access. Verify manifests and personnel ID.'},
+  {id:'ijkc-e-4', venue:'IJKC', floor:'External Site', x:15.0, y:20.0, name:'NW Parking Perimeter',       type:'Patrol',     priority:'Medium', status:'Active', officer:'', notes:'Northwest parking lot perimeter sweep.'},
+  {id:'ijkc-e-5', venue:'IJKC', floor:'External Site', x:85.0, y:78.0, name:'SE Parking Perimeter',       type:'Patrol',     priority:'Medium', status:'Active', officer:'', notes:'Southeast parking perimeter sweep.'},
+  {id:'ijkc-e-6', venue:'IJKC', floor:'External Site', x:20.0, y:78.0, name:'SW Parking Perimeter',       type:'Patrol',     priority:'Low',    status:'Active', officer:'', notes:'Southwest parking perimeter sweep.'},
+
+  // ─── IJKC LOGGIA & PRAYER HALL ───
+  {id:'ijkc-l-1', venue:'IJKC', floor:'Loggia & Prayer Hall', x:12.0, y:50.0, name:'Portal – Main Entry Screening',  type:'Screening',  priority:'High',   status:'Active', officer:'', notes:'Primary access screening. Bag check and credential verification at portal entry.'},
+  {id:'ijkc-l-2', venue:'IJKC', floor:'Loggia & Prayer Hall', x:35.0, y:28.0, name:'Ladies Cloakroom Entry',         type:'Observation',priority:'Low',    status:'Active', officer:'', notes:'Monitor ladies cloakroom access during high-occupancy events.'},
+  {id:'ijkc-l-3', venue:'IJKC', floor:'Loggia & Prayer Hall', x:35.0, y:72.0, name:"Men's Cloakroom Entry",          type:'Observation',priority:'Low',    status:'Active', officer:'', notes:"Monitor men's cloakroom access during high-occupancy events."},
+  {id:'ijkc-l-4', venue:'IJKC', floor:'Loggia & Prayer Hall', x:52.0, y:50.0, name:'Prayer Hall – Main Entry',       type:'Entry/Exit', priority:'High',   status:'Active', officer:'', notes:'High-occupancy during services. Manage bidirectional crowd flow. Coordinate with Portal post.'},
+  {id:'ijkc-l-5', venue:'IJKC', floor:'Loggia & Prayer Hall', x:90.0, y:25.0, name:'Emergency Exit NE',              type:'Emergency',  priority:'High',   status:'Active', officer:'', notes:'NE emergency exit. Keep clear at all times. Monitor for unauthorized entry.'},
+  {id:'ijkc-l-6', venue:'IJKC', floor:'Loggia & Prayer Hall', x:90.0, y:72.0, name:'Emergency Exit SE',              type:'Emergency',  priority:'High',   status:'Active', officer:'', notes:'SE emergency exit. Keep clear at all times. Monitor for unauthorized entry.'},
+  {id:'ijkc-l-7', venue:'IJKC', floor:'Loggia & Prayer Hall', x:55.0, y:15.0, name:'Loading Ramp Access Control',    type:'Screening',  priority:'Medium', status:'Active', officer:'', notes:'Ramp leads down to lower level. Restrict to authorized personnel only.'},
+
+  // ─── IJKC LOWER LEVEL ───
+  {id:'ijkc-ll-1', venue:'IJKC', floor:'Lower Level', x:60.0, y:45.0, name:'Main Reception',               type:'Entry/Exit', priority:'High',   status:'Active', officer:'', notes:'Central control point for all office, classroom, and admin areas. Monitor all visitors.'},
+  {id:'ijkc-ll-2', venue:'IJKC', floor:'Lower Level', x:15.0, y:45.0, name:'Council Chamber Entry',         type:'Observation',priority:'Medium', status:'Active', officer:'', notes:'Restricted during formal sessions. Verify credentials for Council meetings.'},
+  {id:'ijkc-ll-3', venue:'IJKC', floor:'Lower Level', x:55.0, y:14.0, name:'Loading Ramp / Service Entry',  type:'Screening',  priority:'High',   status:'Active', officer:'', notes:'Service vehicle and delivery access from ground. Verify all incoming personnel.'},
+  {id:'ijkc-ll-4', venue:'IJKC', floor:'Lower Level', x:64.0, y:65.0, name:'Classroom Corridor Patrol',     type:'Patrol',     priority:'Medium', status:'Active', officer:'', notes:'Corridor serving 5 classrooms and Reading Room. Regular sweep during occupied periods.'},
+  {id:'ijkc-ll-5', venue:'IJKC', floor:'Lower Level', x:15.0, y:20.0, name:'NW Stairwell Monitor',          type:'Observation',priority:'Medium', status:'Active', officer:'', notes:'Stairwell between lower and upper floors. Monitor unauthorized access.'},
+  {id:'ijkc-ll-6', venue:'IJKC', floor:'Lower Level', x:90.0, y:50.0, name:'East Wing / Residential Access',type:'Screening',  priority:'Medium', status:'Active', officer:'', notes:'Bedroom, dining, and living quarters east wing. Authorized staff only.'},
+
+  // ─── IJKC UPPER LEVEL ───
+  {id:'ijkc-u-1', venue:'IJKC', floor:'Upper Level', x:15.0, y:22.0, name:'NW Stairwell Entry',      type:'Entry/Exit', priority:'High',   status:'Active', officer:'', notes:'NW corner stairwell. Primary access point from ground level.'},
+  {id:'ijkc-u-2', venue:'IJKC', floor:'Upper Level', x:15.0, y:78.0, name:'SW Stairwell Entry',      type:'Entry/Exit', priority:'High',   status:'Active', officer:'', notes:'SW corner stairwell access.'},
+  {id:'ijkc-u-3', venue:'IJKC', floor:'Upper Level', x:45.0, y:22.0, name:'NE Stairwell Entry',      type:'Entry/Exit', priority:'High',   status:'Active', officer:'', notes:'NE corner stairwell, adjacent to Ladies restroom.'},
+  {id:'ijkc-u-4', venue:'IJKC', floor:'Upper Level', x:45.0, y:78.0, name:'SE Stairwell Entry',      type:'Entry/Exit', priority:'High',   status:'Active', officer:'', notes:'SE corner stairwell, adjacent to Gents restroom.'},
+  {id:'ijkc-u-5', venue:'IJKC', floor:'Upper Level', x:38.0, y:50.0, name:'Stage Area',              type:'Observation',priority:'High',   status:'Active', officer:'', notes:'Maintain clear stage perimeter during events. Restrict backstage/kitchen area access.'},
+  {id:'ijkc-u-6', venue:'IJKC', floor:'Upper Level', x:46.0, y:50.0, name:'Kitchen Access Control',  type:'Screening',  priority:'Medium', status:'Active', officer:'', notes:'Kitchen adjacent to stage. Authorized catering and kitchen staff only.'},
+  {id:'ijkc-u-7', venue:'IJKC', floor:'Upper Level', x:30.0, y:50.0, name:'Social Hall Floor Patrol',type:'Patrol',     priority:'Medium', status:'Active', officer:'', notes:'General floor patrol covering seating and aisle areas during events.'},
+
+  // ─── VCEC EAST CONVENTION ───
+  {id:'vcec-ec-1',  venue:'VCEC', floor:'East Convention Level', x:20.0, y:55.0, name:'Main Entrance / East Plaza Lobby',    type:'Entry/Exit', priority:'High',   status:'Active', officer:'', notes:'Primary public entry. High volume. Multiple screeners. Box office and coat check nearby.'},
+  {id:'vcec-ec-2',  venue:'VCEC', floor:'East Convention Level', x:40.0, y:30.0, name:'Delegate Concourse (West)',           type:'Patrol',     priority:'Medium', status:'Active', officer:'', notes:'West delegate concourse patrol. Monitor Ballroom A/B/C access and flow.'},
+  {id:'vcec-ec-3',  venue:'VCEC', floor:'East Convention Level', x:70.0, y:30.0, name:'Delegate Concourse (East)',           type:'Patrol',     priority:'Medium', status:'Active', officer:'', notes:'East delegate concourse. Monitor Exhibition Halls A/B/C access.'},
+  {id:'vcec-ec-4',  venue:'VCEC', floor:'East Convention Level', x:36.0, y:74.0, name:'Loading Bay / Truck Route',           type:'Screening',  priority:'High',   status:'Active', officer:'', notes:'Truck route and loading bay. Verify all delivery vehicles and personnel. Overhead doors monitored.'},
+  {id:'vcec-ec-5',  venue:'VCEC', floor:'East Convention Level', x:30.0, y:50.0, name:'Ballroom A/B/C Entry',                type:'Entry/Exit', priority:'Medium', status:'Active', officer:'', notes:'Ballrooms A (5,613), B (5,800), C (5,191 sq ft). Event badge/ticket check.'},
+  {id:'vcec-ec-6',  venue:'VCEC', floor:'East Convention Level', x:55.0, y:50.0, name:'Exhibition Hall A Entry',             type:'Entry/Exit', priority:'Medium', status:'Active', officer:'', notes:'Exhibition Hall A – 22,684 sq ft. Badge/wristband scan at entry.'},
+  {id:'vcec-ec-7',  venue:'VCEC', floor:'East Convention Level', x:68.0, y:50.0, name:'Exhibition Hall B Entry',             type:'Entry/Exit', priority:'Medium', status:'Active', officer:'', notes:'Exhibition Hall B – 38,684 sq ft (largest). Multiple scan lanes needed.'},
+  {id:'vcec-ec-8',  venue:'VCEC', floor:'East Convention Level', x:82.0, y:50.0, name:'Exhibition Hall C Entry',             type:'Entry/Exit', priority:'Medium', status:'Active', officer:'', notes:'Exhibition Hall C – 29,837 sq ft. Badge/wristband scan.'},
+  {id:'vcec-ec-9',  venue:'VCEC', floor:'East Convention Level', x:14.0, y:48.0, name:'Underground Connector (to West Bldg)',type:'Screening',  priority:'High',   status:'Active', officer:'', notes:'East–West underground connector. Verify credentials during restricted events.'},
+  {id:'vcec-ec-10', venue:'VCEC', floor:'East Convention Level', x:14.0, y:56.0, name:'Hotel Lobby / Food Court Connector',  type:'Observation',priority:'Medium', status:'Active', officer:'', notes:'Monitor flow to/from hotel lobby and underground food court connector.'},
+
+  // ─── VCEC EAST MEETING ───
+  {id:'vcec-em-1', venue:'VCEC', floor:'East Meeting Level', x:40.0, y:12.0, name:'North Entrance (To/From Ground Level)', type:'Entry/Exit', priority:'High',   status:'Active', officer:'', notes:'Stair/escalator from street level. Badge check. Monitor both up and down flow.'},
+  {id:'vcec-em-2', venue:'VCEC', floor:'East Meeting Level', x:40.0, y:85.0, name:'South Entrance (To/From Ground Level)', type:'Entry/Exit', priority:'High',   status:'Active', officer:'', notes:'South access from outdoor public promenade.'},
+  {id:'vcec-em-3', venue:'VCEC', floor:'East Meeting Level', x:42.0, y:50.0, name:'To/From Convention Level',             type:'Observation',priority:'Medium', status:'Active', officer:'', notes:'Escalator/elevator core to convention level below. Monitor bidirectional flow.'},
+  {id:'vcec-em-4', venue:'VCEC', floor:'East Meeting Level', x:51.0, y:48.0, name:'To/From Hotel Connector',              type:'Observation',priority:'Medium', status:'Active', officer:'', notes:'Hotel access escalator/stairs. Monitor during restricted events.'},
+  {id:'vcec-em-5', venue:'VCEC', floor:'East Meeting Level', x:47.0, y:62.0, name:'Atrium Foyer',                        type:'Patrol',     priority:'Medium', status:'Active', officer:'', notes:'Central atrium. High-traffic convergence point for rooms 16-20 area.'},
+  {id:'vcec-em-6', venue:'VCEC', floor:'East Meeting Level', x:60.0, y:40.0, name:'West Foyer Patrol',                   type:'Patrol',     priority:'Medium', status:'Active', officer:'', notes:'West foyer serving rooms 4–9. Monitor traffic between sessions.'},
+  {id:'vcec-em-7', venue:'VCEC', floor:'East Meeting Level', x:80.0, y:65.0, name:'East Foyer Patrol',                   type:'Patrol',     priority:'Medium', status:'Active', officer:'', notes:'East foyer serving rooms 10–14.'},
+  {id:'vcec-em-8', venue:'VCEC', floor:'East Meeting Level', x:25.0, y:68.0, name:'South Foyer Patrol',                  type:'Patrol',     priority:'Medium', status:'Active', officer:'', notes:'South foyer serving rooms 1–3.'},
+  {id:'vcec-em-9', venue:'VCEC', floor:'East Meeting Level', x:25.0, y:15.0, name:'Terrace Access',                      type:'Observation',priority:'Low',    status:'Active', officer:'', notes:'Outdoor terrace. Monitor for unauthorized exterior access.'},
+
+  // ─── VCEC WEST EXHIBITION ───
+  {id:'vcec-we-1', venue:'VCEC', floor:'West Exhibition Level', x:72.0, y:22.0, name:'Loading Bay – Ramp A',         type:'Entry/Exit', priority:'High',   status:'Active', officer:'', notes:'Truck ramp A (Overhead Door 22\'6"×23\'11"). All vehicles verified. Manifests checked.'},
+  {id:'vcec-we-2', venue:'VCEC', floor:'West Exhibition Level', x:52.0, y:22.0, name:'Loading Bay – Ramp B',         type:'Entry/Exit', priority:'High',   status:'Active', officer:'', notes:'Ramp B (22\'6"×15\'4"). Verify truck operators and cargo.'},
+  {id:'vcec-we-3', venue:'VCEC', floor:'West Exhibition Level', x:33.0, y:22.0, name:'Loading Bay – Ramp C / Turnaround',type:'Entry/Exit',priority:'High',  status:'Active', officer:'', notes:'Ramp C and truck turnaround area. Float plane terminal proximity – coordinate with Flight Centre.'},
+  {id:'vcec-we-4', venue:'VCEC', floor:'West Exhibition Level', x:50.0, y:82.0, name:'Exhibition Hall Foyer',         type:'Entry/Exit', priority:'High',   status:'Active', officer:'', notes:'Public entry point to all exhibition halls. Registration support desk nearby. Badge/wristband required.'},
+  {id:'vcec-we-5', venue:'VCEC', floor:'West Exhibition Level', x:78.0, y:60.0, name:'Exhibition Hall A Entry',       type:'Screening',  priority:'Medium', status:'Active', officer:'', notes:'Hall A – 58,502 sq ft. Badge scan at entry doors.'},
+  {id:'vcec-we-6', venue:'VCEC', floor:'West Exhibition Level', x:52.0, y:60.0, name:'Exhibition Hall B Entry (B1-B3)',type:'Screening', priority:'Medium', status:'Active', officer:'', notes:'Hall B – 72,000 sq ft (B1 27K, B2 27K, B3 18K). Monitor partition access during divided events.'},
+  {id:'vcec-we-7', venue:'VCEC', floor:'West Exhibition Level', x:28.0, y:60.0, name:'Exhibition Hall C Entry',       type:'Screening',  priority:'Medium', status:'Active', officer:'', notes:'Hall C – 90,000 sq ft (largest in West). Multiple screening lanes needed.'},
+  {id:'vcec-we-8', venue:'VCEC', floor:'West Exhibition Level', x:88.0, y:60.0, name:'Back of House / Forklift Zone', type:'Screening',  priority:'High',   status:'Active', officer:'', notes:'Service elevators, freight elevators, show offices. Forklift-only door. Authorized personnel only.'},
+
+  // ─── VCEC WEST LEVEL 1 ───
+  {id:'vcec-w1-1', venue:'VCEC', floor:'West Level 1', x:13.0, y:78.0, name:'Thurlow St Entrance',              type:'Entry/Exit', priority:'High',   status:'Active', officer:'', notes:'Primary west building public entry from Thurlow St. Bag screening required. High pedestrian volume.'},
+  {id:'vcec-w1-2', venue:'VCEC', floor:'West Level 1', x:62.0, y:92.0, name:'Burrard St Entrance',              type:'Entry/Exit', priority:'High',   status:'Active', officer:'', notes:'Secondary public entrance from Burrard St. Screening point.'},
+  {id:'vcec-w1-3', venue:'VCEC', floor:'West Level 1', x:85.0, y:65.0, name:'Seawall Pathway Entrance',         type:'Entry/Exit', priority:'High',   status:'Active', officer:'', notes:'Waterfront/seawall public entry. Coordinate with outdoor security.'},
+  {id:'vcec-w1-4', venue:'VCEC', floor:'West Level 1', x:18.0, y:58.0, name:'Ballroom Foyer',                   type:'Patrol',     priority:'Medium', status:'Active', officer:'', notes:'Foyer serving Ballrooms A–D. High volume during events. Manage queue lines.'},
+  {id:'vcec-w1-5', venue:'VCEC', floor:'West Level 1', x:85.0, y:88.0, name:'Underground Connector to East Bldg',type:'Screening', priority:'High',   status:'Active', officer:'', notes:'Cross-building connector. Monitor bidirectional transit. Key post during multi-venue events.'},
+  {id:'vcec-w1-6', venue:'VCEC', floor:'West Level 1', x:28.0, y:78.0, name:'Ballroom A Entry',                 type:'Entry/Exit', priority:'Medium', status:'Active', officer:'', notes:'Ballroom A – 14,448 sq ft. Event credential check.'},
+  {id:'vcec-w1-7', venue:'VCEC', floor:'West Level 1', x:28.0, y:35.0, name:'Ballroom D Entry',                 type:'Entry/Exit', priority:'Medium', status:'Active', officer:'', notes:'Ballroom D – 7,980 sq ft. Event credential check.'},
+  {id:'vcec-w1-8', venue:'VCEC', floor:'West Level 1', x:58.0, y:58.0, name:'Kitchen Service Corridor',         type:'Screening',  priority:'Medium', status:'Active', officer:'', notes:'Catering and kitchen staff corridor. Verify all service personnel IDs.'},
+  {id:'vcec-w1-9', venue:'VCEC', floor:'West Level 1', x:48.0, y:85.0, name:'Parkade / Hotel Connector',        type:'Observation',priority:'Medium', status:'Active', officer:'', notes:'Access to parkade and hotel. Monitor for unauthorized entry from parking levels.'},
+
+  // ─── VCEC WEST LEVEL 2 ───
+  {id:'vcec-w2-1', venue:'VCEC', floor:'West Level 2', x:18.0, y:80.0, name:'Grand Staircase',               type:'Observation', priority:'High',   status:'Active', officer:'', notes:'Primary vertical circulation L1–L2. Monitor bidirectional pedestrian flow.'},
+  {id:'vcec-w2-2', venue:'VCEC', floor:'West Level 2', x:72.0, y:28.0, name:'Level 2 Ocean Foyer',           type:'Patrol',      priority:'Medium', status:'Active', officer:'', notes:'Ocean-facing foyer and terrace access. Monitor exterior terrace access points.'},
+  {id:'vcec-w2-3', venue:'VCEC', floor:'West Level 2', x:28.0, y:92.0, name:'South Terrace Access',          type:'Observation', priority:'Medium', status:'Active', officer:'', notes:'Outdoor terrace. Supervise during events. Living Roof beehive area nearby.'},
+  {id:'vcec-w2-4', venue:'VCEC', floor:'West Level 2', x:80.0, y:48.0, name:'Service Elevator Cluster',      type:'Screening',   priority:'Medium', status:'Active', officer:'', notes:'Freight and service elevators. Restrict to authorized show and catering staff.'},
+  {id:'vcec-w2-5', venue:'VCEC', floor:'West Level 2', x:55.0, y:40.0, name:'Back of House Corridor',        type:'Screening',   priority:'Medium', status:'Active', officer:'', notes:'Back of house access corridor. Staff only.'},
+  {id:'vcec-w2-6', venue:'VCEC', floor:'West Level 2', x:40.0, y:85.0, name:'Level 2 City Foyer / Workspring',type:'Patrol',     priority:'Low',    status:'Active', officer:'', notes:'Open foyer and Workspring area. Casual monitoring.'},
+
+  // ─── VCEC WEST LEVEL 3 (SUMMIT) ───
+  {id:'vcec-w3-1', venue:'VCEC', floor:'West Level 3', x:72.0, y:30.0, name:'Summit Foyer Entry',       type:'Entry/Exit', priority:'High',   status:'Active', officer:'', notes:'Main access to Summit Level (rooms 301–306). Badge required. Coal Harbour views.'},
+  {id:'vcec-w3-2', venue:'VCEC', floor:'West Level 3', x:88.0, y:28.0, name:'Summit Terrace Access',    type:'Observation', priority:'Medium', status:'Active', officer:'', notes:'Outdoor summit terrace overlooking Stanley Park. Monitor perimeter.'},
+  {id:'vcec-w3-3', venue:'VCEC', floor:'West Level 3', x:82.0, y:42.0, name:'Summit Elevator Core',     type:'Observation', priority:'Medium', status:'Active', officer:'', notes:'Elevator serving Summit Level. Monitor arrivals and departures.'},
+  {id:'vcec-w3-4', venue:'VCEC', floor:'West Level 3', x:75.0, y:55.0, name:'Back of House (Summit)',   type:'Screening',   priority:'Medium', status:'Active', officer:'', notes:'Summit service area. Restrict to authorized catering and A/V staff.'},
+];
+
+// ══════════════════════════════════════════
+// STATE
+// ══════════════════════════════════════════
+
+const S = {
+  venue: null,
+  floor: null,
+  checkpoints: [],
+  selectedId: null,
+  addMode: false,
+  tab: 'list',
+  // custom venues & floors
+  customVenues: {},   // { venueKey: { name } }
+  addedFloors: {},    // { venueKey: { floorName: { kind, fileId } } }
+  hiddenVenues: [],   // built-in venue keys that were hidden/deleted
+  hiddenFloors: {},   // { venueKey: [floorName, ...] } built-in floors hidden
+  // officers roster
+  officers: [],      // ['Officer Smith', 'Unit 4', ...]
+  // patrol
+  patrol: null,      // active patrol session object
+  patrolLogs: [],    // completed patrol history
+  patrolExpanded: {},// which history items are expanded
+  openLogForm: null, // which checkpoint id has the log form open
+};
+
+let dragState = null;
+
+// ══════════════════════════════════════════
+// INIT
+// ══════════════════════════════════════════
+
+function init() {
+  try {
+    const saved = localStorage.getItem('scp-v2');
+    const parsed = saved ? JSON.parse(saved) : null;
+    S.checkpoints = (parsed && parsed.length > 0) ? parsed : deepClone(DEFAULTS);
+  } catch(e) {
+    S.checkpoints = deepClone(DEFAULTS);
+  }
+  try {
+    const logs = localStorage.getItem('scp-patrol-logs');
+    S.patrolLogs = logs ? JSON.parse(logs) : [];
+  } catch(e) { S.patrolLogs = []; }
+  try {
+    const cv = localStorage.getItem('scp-custom-venues');
+    S.customVenues = cv ? JSON.parse(cv) : {};
+  } catch(e) { S.customVenues = {}; }
+  try {
+    const af = localStorage.getItem('scp-added-floors');
+    S.addedFloors = af ? JSON.parse(af) : {};
+  } catch(e) { S.addedFloors = {}; }
+  try {
+    const off = localStorage.getItem('scp-officers');
+    S.officers = off ? JSON.parse(off) : [];
+  } catch(e) { S.officers = []; }
+  try {
+    const hv = localStorage.getItem('scp-hidden-venues');
+    S.hiddenVenues = hv ? JSON.parse(hv) : [];
+  } catch(e) { S.hiddenVenues = []; }
+  try {
+    const hf = localStorage.getItem('scp-hidden-floors');
+    S.hiddenFloors = hf ? JSON.parse(hf) : {};
+  } catch(e) { S.hiddenFloors = {}; }
+  buildLegend();
+  renderSidebar();
+  renderOfficers();
+}
+
+function persistCustom() {
+  localStorage.setItem('scp-custom-venues',  JSON.stringify(S.customVenues));
+  localStorage.setItem('scp-added-floors',   JSON.stringify(S.addedFloors));
+  localStorage.setItem('scp-hidden-venues',  JSON.stringify(S.hiddenVenues));
+  localStorage.setItem('scp-hidden-floors',  JSON.stringify(S.hiddenFloors));
+}
+
+// ── Merged venue/floor helpers ──
+function allVenues() {
+  const merged = {};
+  // built-in first (skip hidden venues)
+  for (const [k, v] of Object.entries(VENUES)) {
+    if (S.hiddenVenues.includes(k)) continue;
+    // built-in floors minus hidden ones, overrides from addedFloors take precedence
+    const hiddenFl = S.hiddenFloors[k] || [];
+    const builtInFloors = {};
+    for (const [fl, fd] of Object.entries(v.floors)) {
+      if (!hiddenFl.includes(fl)) builtInFloors[fl] = fd;
+    }
+    merged[k] = { name: v.name, isBuiltIn: true, floors: { ...builtInFloors, ...(S.addedFloors[k] || {}) } };
+  }
+  // custom venues
+  for (const [k, v] of Object.entries(S.customVenues)) {
+    merged[k] = { name: v.name, isBuiltIn: false, floors: { ...(S.addedFloors[k] || {}) } };
+  }
+  return merged;
+}
+
+function getFloorData(venueKey, floor) {
+  // user-uploaded override takes precedence over built-in
+  const fd = S.addedFloors[venueKey]?.[floor];
+  if (fd) {
+    const src = localStorage.getItem('scp-file-' + fd.fileId);
+    if (src) return { kind: fd.kind, src };
+  }
+  // built-in floor (only if not hidden)
+  const hiddenFl = S.hiddenFloors[venueKey] || [];
+  if (VENUES[venueKey]?.floors[floor] && !hiddenFl.includes(floor)) {
+    return VENUES[venueKey].floors[floor];
+  }
+  return null;
+}
+
+function persistPatrol() {
+  localStorage.setItem('scp-patrol-logs', JSON.stringify(S.patrolLogs));
+}
+
+function persistOfficers() {
+  localStorage.setItem('scp-officers', JSON.stringify(S.officers));
+}
+
+function renderOfficers() {
+  const el = document.getElementById('officer-list-inner');
+  if (!el) return;
+  if (!S.officers.length) {
+    el.innerHTML = '<div style="font-size:11px;color:#484f58;padding:2px 0">No officers added yet.</div>';
+    return;
+  }
+  el.innerHTML = S.officers.map((name, i) =>
+    `<div class="officer-item">
+      <span class="officer-item-name">${h(name)}</span>
+      <button class="officer-del-btn" title="Remove officer" onclick="deleteOfficer(${i})">✕</button>
+    </div>`
+  ).join('');
+}
+
+function addOfficer() {
+  const name = prompt('Officer name or callsign:');
+  if (!name || !name.trim()) return;
+  const trimmed = name.trim();
+  if (S.officers.includes(trimmed)) { alert('That officer is already in the roster.'); return; }
+  S.officers.push(trimmed);
+  persistOfficers();
+  renderOfficers();
+}
+
+function deleteOfficer(idx) {
+  S.officers.splice(idx, 1);
+  persistOfficers();
+  renderOfficers();
+}
+
+function patrolOfficerLabel(patrol) {
+  if (patrol.officers && patrol.officers.length) return patrol.officers.join(', ');
+  return patrol.officer || '';
+}
+
+function persist() {
+  localStorage.setItem('scp-v2', JSON.stringify(S.checkpoints));
+}
+
+function deepClone(o) { return JSON.parse(JSON.stringify(o)); }
+
+// ══════════════════════════════════════════
+// LEGEND
+// ══════════════════════════════════════════
+
+function buildLegend() {
+  const el = document.getElementById('legend-items');
+  el.innerHTML = Object.entries(TYPE_COLORS).map(([t, c]) =>
+    `<div class="legend-item"><span class="legend-dot" style="background:${c}"></span>${t}</div>`
+  ).join('');
+}
+
+// ══════════════════════════════════════════
+// SIDEBAR
+// ══════════════════════════════════════════
+
+function renderSidebar() {
+  const tree = document.getElementById('venue-tree');
+  const venues = allVenues();
+  // show restore button if anything is hidden
+  const anyHidden = S.hiddenVenues.length > 0 || Object.values(S.hiddenFloors).some(a => a.length > 0);
+  const restoreBtn = document.getElementById('btn-restore-venues');
+  if (restoreBtn) restoreBtn.style.display = anyHidden ? '' : 'none';
+  tree.innerHTML = Object.entries(venues).map(([vk, v]) => {
+    const isOpen = S.venue === vk;
+    const vc = S.checkpoints.filter(c => c.venue === vk).length;
+    const floors = Object.keys(v.floors).map(fl => {
+      const fc = S.checkpoints.filter(c => c.venue === vk && c.floor === fl).length;
+      const active = S.venue === vk && S.floor === fl;
+      const flSafe = fl.replace(/'/g,"\\'");
+      const isBuiltInFloor = !!VENUES[vk]?.floors[fl];
+      const hasOverride = !!S.addedFloors[vk]?.[fl];
+      const replaceBtn = isBuiltInFloor
+        ? `<button class="floor-action-btn" title="${hasOverride?'Change replacement map':'Replace map'}" onclick="replaceFloor(event,'${vk}','${flSafe}')" style="color:#e3b341">↺</button>`
+        : '';
+      return `<div class="floor-item${active?' active':''}" onclick="selectFloor('${vk}','${flSafe}')">
+        <span class="floor-item-name">${h(fl)}${hasOverride?'<span title="Custom map" style="color:#e3b341;font-size:9px;margin-left:3px">●</span>':''}</span>
+        <span class="floor-cp-count">${fc}</span>
+        <span class="floor-actions">
+          ${replaceBtn}
+          <button class="floor-action-btn" title="Delete floor" onclick="deleteFloor(event,'${vk}','${flSafe}')">✕</button>
+        </span>
+      </div>`;
+    }).join('');
+    const deleteBtn = `<button class="venue-action-btn" title="${v.isBuiltIn?'Hide venue':'Delete venue'}" onclick="deleteVenue(event,'${vk}')">✕</button>`;
+    return `<div class="venue-group">
+      <div class="venue-header${isOpen?' open':''}" onclick="toggleVenue('${vk}')">
+        <span class="venue-arrow">▶</span>
+        <span class="venue-name">${h(v.name)}</span>
+        <span class="venue-count">${vc}</span>
+        <span class="venue-actions">
+          <button class="venue-action-btn" title="Add floor map" onclick="openFloorModal(event,'${vk}')">＋</button>
+          ${deleteBtn}
+        </span>
+      </div>
+      <div class="floor-list${isOpen?' open':''}">
+        ${floors}
+        <button class="btn-add-floor" onclick="openFloorModal(event,'${vk}')">＋ Add floor map</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function toggleVenue(vk) {
+  S.venue = S.venue === vk && !S.floor ? null : vk;
+  if (S.venue !== vk) S.floor = null;
+  renderSidebar();
+}
+
+function selectFloor(vk, fl) {
+  S.venue = vk;
+  S.floor = fl;
+  S.selectedId = null;
+  S.addMode = false;
+  S.openLogForm = null;
+  renderSidebar();
+  renderMap();
+  renderPanel();
+  updateToolbar();
+  updateStats();
+}
+
+// ══════════════════════════════════════════
+// MAP
+// ══════════════════════════════════════════
+
+function renderMap() {
+  const display = document.getElementById('map-display');
+  const overlay = document.getElementById('cp-overlay');
+
+  if (!S.venue || !S.floor) {
+    display.innerHTML = `<div id="no-map"><div class="no-map-icon">🗺</div><div>Select a venue and floor to begin</div></div>`;
+    overlay.style.display = 'none';
+    return;
+  }
+
+  overlay.style.display = 'block';
+  const fd = getFloorData(S.venue, S.floor);
+
+  if (!fd) {
+    display.innerHTML = `<div id="no-map"><div class="no-map-icon">⚠️</div><div>Map file could not be loaded.<br><small style="color:#484f58">The file may have been removed from storage.</small></div></div>`;
+    return;
+  }
+
+  if (fd.kind === 'image') {
+    const img = new Image();
+    img.onload = () => {
+      display.innerHTML = '';
+      display.appendChild(img);
+      // size overlay to match image
+      overlay.style.width = img.naturalWidth + 'px';
+      overlay.style.height = img.naturalHeight + 'px';
+      renderMarkers();
+    };
+    img.onerror = () => {
+      display.innerHTML = `<div id="no-map"><div class="no-map-icon">⚠️</div><div>Image not found.<br><small style="font-size:10px;color:#484f58">${fd.src}</small></div></div>`;
+    };
+    img.src = fd.src;
+    img.style.display = 'block';
+    img.style.maxWidth = '100%';
+    img.draggable = false;
+  } else {
+    // PDF via object tag
+    const W = 1100, H = 780;
+    display.innerHTML = `<object data="${fd.src}#zoom=page-fit" type="application/pdf" width="${W}" height="${H}">
+      <div id="no-map"><div class="no-map-icon">📄</div><div>Could not display PDF.<br><a href="${fd.src}" target="_blank" style="color:#58a6ff">Open in browser</a></div></div>
+    </object>`;
+    overlay.style.width = W + 'px';
+    overlay.style.height = H + 'px';
+    renderMarkers();
+  }
+}
+
+// ── MARKERS ──
+
+function renderMarkers() {
+  const overlay = document.getElementById('cp-overlay');
+  overlay.querySelectorAll('.cp-marker').forEach(m => m.remove());
+  if (!S.venue || !S.floor) return;
+
+  S.checkpoints
+    .filter(cp => cp.venue === S.venue && cp.floor === S.floor)
+    .forEach(cp => createMarker(cp, overlay));
+}
+
+function createMarker(cp, overlay) {
+  const color = TYPE_COLORS[cp.type] || '#58a6ff';
+  const ring = cp.priority === 'High' ? '#f85149' : cp.priority === 'Medium' ? '#e3b341' : '#3fb950';
+  const letter = {
+    'Entry/Exit':'E','Screening':'S','Patrol':'P','Observation':'O','Emergency':'!'
+  }[cp.type] || '?';
+
+  const el = document.createElement('div');
+  el.className = 'cp-marker' + (S.selectedId === cp.id ? ' selected' : '');
+  el.dataset.id = cp.id;
+  el.style.left = cp.x + '%';
+  el.style.top  = cp.y + '%';
+  el.innerHTML = `
+    <div class="cp-tooltip">${cp.name}</div>
+    <svg width="26" height="34" viewBox="0 0 26 34" xmlns="http://www.w3.org/2000/svg">
+      <path d="M13 0C5.82 0 0 5.82 0 13c0 8.67 13 21 13 21S26 21.67 26 13C26 5.82 20.18 0 13 0z" fill="${color}" stroke="${ring}" stroke-width="2.5"/>
+      <circle cx="13" cy="13" r="6" fill="rgba(0,0,0,0.3)"/>
+      <text x="13" y="17" text-anchor="middle" font-size="9" fill="white" font-weight="800" font-family="Arial,sans-serif">${letter}</text>
+    </svg>`;
+
+  el.addEventListener('mousedown', (e) => { e.stopPropagation(); startDrag(e, cp.id); });
+  el.addEventListener('click', (e) => { if (!dragState?.moved) { e.stopPropagation(); pickCheckpoint(cp.id); } });
+  overlay.appendChild(el);
+}
+
+// ── DRAG ──
+
+function startDrag(e, id) {
+  if (S.addMode) return;
+  e.preventDefault();
+
+  const overlay = document.getElementById('cp-overlay');
+  const marker = overlay.querySelector(`[data-id="${id}"]`);
+
+  // Transparent capture layer placed over PDF/image so mouse events aren't swallowed
+  const capture = document.createElement('div');
+  capture.style.cssText = 'position:fixed;inset:0;z-index:9999;cursor:grabbing';
+  document.body.appendChild(capture);
+
+  dragState = { id, moved: false, startX: e.clientX, startY: e.clientY };
+  if (marker) marker.classList.add('dragging');
+
+  const getPos = (ev) => {
+    const rect = overlay.getBoundingClientRect();
+    return {
+      x: parseFloat(Math.max(0, Math.min(100, (ev.clientX - rect.left) / rect.width  * 100)).toFixed(2)),
+      y: parseFloat(Math.max(0, Math.min(100, (ev.clientY - rect.top)  / rect.height * 100)).toFixed(2)),
+    };
+  };
+
+  const onMove = (ev) => {
+    const dx = Math.abs(ev.clientX - dragState.startX);
+    const dy = Math.abs(ev.clientY - dragState.startY);
+    if (dx > 3 || dy > 3) dragState.moved = true;
+    if (!dragState.moved) return;
+    const {x, y} = getPos(ev);
+    if (marker) { marker.style.left = x + '%'; marker.style.top = y + '%'; }
+  };
+
+  const onUp = (ev) => {
+    capture.remove();
+    document.removeEventListener('mousemove', onMove);
+    document.removeEventListener('mouseup', onUp);
+    if (marker) marker.classList.remove('dragging');
+
+    if (dragState?.moved) {
+      const {x, y} = getPos(ev);
+      const cp = S.checkpoints.find(c => c.id === id);
+      if (cp) {
+        cp.x = x; cp.y = y;
+        persist();
+        // Update marker position without full re-render
+        if (marker) { marker.style.left = x + '%'; marker.style.top = y + '%'; }
+        if (S.tab === 'edit' && S.selectedId === id) renderEdit();
+      }
+    }
+    dragState = null;
+  };
+
+  document.addEventListener('mousemove', onMove);
+  document.addEventListener('mouseup', onUp);
+}
+
+// ── MAP CLICK (add mode) ──
+
+function handleOverlayClick(e) {
+  if (!S.addMode || !S.venue || !S.floor) return;
+  const overlay = document.getElementById('cp-overlay');
+  const rect = overlay.getBoundingClientRect();
+  const x = parseFloat(((e.clientX - rect.left) / rect.width * 100).toFixed(2));
+  const y = parseFloat(((e.clientY - rect.top)  / rect.height * 100).toFixed(2));
+
+  const cp = {
+    id: 'cp-' + Date.now(),
+    venue: S.venue, floor: S.floor,
+    x, y,
+    name: 'New Checkpoint',
+    type: 'Patrol', priority: 'Medium', status: 'Active', officer: '', notes: '',
+  };
+  S.checkpoints.push(cp);
+  persist();
+  S.selectedId = cp.id;
+  S.addMode = false;
+
+  renderSidebar();
+  renderMarkers();
+  updateToolbar();
+  updateStats();
+  switchTab('edit');
+}
+
+// ══════════════════════════════════════════
+// PANEL
+// ══════════════════════════════════════════
+
+function renderPanel() {
+  if (S.tab === 'list') renderList();
+  else if (S.tab === 'edit') renderEdit();
+  else renderPatrolPanel();
+}
+
+function switchTab(tab) {
+  S.tab = tab;
+  document.querySelectorAll('.ptab').forEach((t, i) =>
+    t.classList.toggle('active', (i===0&&tab==='list')||(i===1&&tab==='edit')||(i===2&&tab==='patrol'))
+  );
+  renderPanel();
+}
+
+function renderList() {
+  const el = document.getElementById('panel-content');
+  if (!S.venue || !S.floor) {
+    el.innerHTML = `<div class="empty"><div class="empty-icon">📍</div><p>Select a floor from the sidebar to view its checkpoints.</p></div>`;
+    return;
+  }
+  const cps = S.checkpoints.filter(c => c.venue === S.venue && c.floor === S.floor);
+  if (!cps.length) {
+    el.innerHTML = `<div class="empty"><div class="empty-icon">➕</div><p>No checkpoints on this floor yet.<br>Click <b>+ Add Checkpoint</b> then click the map to place one.</p></div>`;
+    return;
+  }
+  const groups = {};
+  cps.forEach(c => { if (!groups[c.type]) groups[c.type] = []; groups[c.type].push(c); });
+  let html = '';
+  for (const [type, items] of Object.entries(groups)) {
+    const col = TYPE_COLORS[type] || '#ccc';
+    html += `<div class="cp-list-section-label"><span class="legend-dot" style="background:${col}"></span>${type} (${items.length})</div>`;
+    items.forEach(cp => {
+      const col2 = TYPE_COLORS[cp.type] || '#ccc';
+      html += `<div class="cp-card${S.selectedId===cp.id?' selected':''}" onclick="pickCheckpoint('${cp.id}')">
+        <div class="cp-card-header">
+          <span class="cp-dot" style="background:${col2}"></span>
+          <span class="cp-card-name" title="${h(cp.name)}">${h(cp.name)}</span>
+          <span class="pri-badge pri-${cp.priority}">${cp.priority}</span>
+        </div>
+        <div class="cp-card-meta">
+          <span>${cp.status}</span>${cp.officer?`<span>· ${h(cp.officer)}</span>`:''}
+        </div>
+      </div>`;
+    });
+  }
+  el.innerHTML = html;
+}
+
+function renderEdit() {
+  const el = document.getElementById('panel-content');
+  if (!S.selectedId) {
+    el.innerHTML = `<div class="empty"><div class="empty-icon">✏️</div><p>Click a checkpoint on the map or in the list to edit it.</p></div>`;
+    return;
+  }
+  const cp = S.checkpoints.find(c => c.id === S.selectedId);
+  if (!cp) { el.innerHTML = ''; return; }
+  const col = TYPE_COLORS[cp.type] || '#ccc';
+  const typeOpts = Object.keys(TYPE_COLORS).map(t =>
+    `<option${cp.type===t?' selected':''}>${t}</option>`).join('');
+  el.innerHTML = `
+    <div class="form-section-title">
+      <span style="width:12px;height:12px;border-radius:50%;background:${col};display:inline-block"></span>
+      Edit Checkpoint
+    </div>
+    <div class="fg"><label class="flabel">Name</label>
+      <input class="finput" value="${h(cp.name)}" oninput="field('name',this.value)"></div>
+    <div class="fg"><label class="flabel">Type</label>
+      <select class="fselect" onchange="field('type',this.value)">${typeOpts}</select></div>
+    <div class="form-row">
+      <div class="fg"><label class="flabel">Priority</label>
+        <select class="fselect" onchange="field('priority',this.value)">
+          ${['High','Medium','Low'].map(p=>`<option${cp.priority===p?' selected':''}>${p}</option>`).join('')}
+        </select></div>
+      <div class="fg"><label class="flabel">Status</label>
+        <select class="fselect" onchange="field('status',this.value)">
+          ${['Active','Inactive'].map(s=>`<option${cp.status===s?' selected':''}>${s}</option>`).join('')}
+        </select></div>
+    </div>
+    <div class="fg"><label class="flabel">Officer / Callsign</label>
+      <input class="finput" placeholder="e.g. Officer Smith / Unit 4" value="${h(cp.officer)}" oninput="field('officer',this.value)"></div>
+    <div class="fg"><label class="flabel">Notes</label>
+      <textarea class="ftextarea" oninput="field('notes',this.value)">${h(cp.notes)}</textarea></div>
+    <div class="form-row">
+      <div class="fg"><label class="flabel">X (% of map)</label>
+        <input class="finput" type="number" min="0" max="100" step="0.1" value="${cp.x.toFixed(1)}" oninput="field('x',parseFloat(this.value))"></div>
+      <div class="fg"><label class="flabel">Y (% of map)</label>
+        <input class="finput" type="number" min="0" max="100" step="0.1" value="${cp.y.toFixed(1)}" oninput="field('y',parseFloat(this.value))"></div>
+    </div>
+    <div class="form-actions">
+      <button class="btn btn-danger" onclick="deleteCP('${cp.id}')">🗑 Delete</button>
+      <button class="btn btn-sec" onclick="dupeCP('${cp.id}')">⧉ Duplicate</button>
+      <button class="btn-save" onclick="switchTab('list')">← List</button>
+    </div>
+    <div class="form-meta">${S.venue} · ${h(S.floor)}<br>ID: ${cp.id}</div>`;
+}
+
+function field(key, val) {
+  const cp = S.checkpoints.find(c => c.id === S.selectedId);
+  if (!cp) return;
+  cp[key] = val;
+  persist();
+  renderMarkers();
+  renderSidebar();
+  updateStats();
+  if (key === 'type') renderEdit(); // refresh color swatch
+}
+
+function pickCheckpoint(id) {
+  S.selectedId = id;
+  renderMarkers();
+  switchTab('edit');
+}
+
+function deleteCP(id) {
+  if (!confirm('Delete this checkpoint?')) return;
+  S.checkpoints = S.checkpoints.filter(c => c.id !== id);
+  S.selectedId = null;
+  persist();
+  renderSidebar();
+  renderMarkers();
+  renderPanel();
+  updateStats();
+  switchTab('list');
+}
+
+function dupeCP(id) {
+  const src = S.checkpoints.find(c => c.id === id);
+  if (!src) return;
+  const n = {...src, id:'cp-'+Date.now(), name:src.name+' (Copy)', x:Math.min(99,src.x+2), y:Math.min(99,src.y+2)};
+  S.checkpoints.push(n);
+  S.selectedId = n.id;
+  persist();
+  renderSidebar();
+  renderMarkers();
+  renderEdit();
+  updateStats();
+}
+
+// ══════════════════════════════════════════
+// TOOLBAR
+// ══════════════════════════════════════════
+
+function toggleAddMode() {
+  S.addMode = !S.addMode;
+  updateToolbar();
+  document.getElementById('cp-overlay').classList.toggle('adding', S.addMode);
+}
+
+function updateToolbar() {
+  const btn = document.getElementById('btn-add');
+  const badge = document.getElementById('mode-badge');
+  const patrolBtn = document.getElementById('btn-patrol');
+  const patrolBar = document.getElementById('patrol-bar');
+
+  if (S.addMode) {
+    btn.textContent = '✕ Cancel';
+    btn.classList.add('cancel');
+    badge.style.display = 'block';
+  } else {
+    btn.textContent = '+ Add Checkpoint';
+    btn.classList.remove('cancel');
+    badge.style.display = 'none';
+  }
+
+  const title = document.getElementById('toolbar-title');
+  title.textContent = (S.venue && S.floor)
+    ? `${VENUES[S.venue].name}  ·  ${S.floor}`
+    : 'Select a venue and floor';
+
+  // patrol button: visible when floor selected and no active patrol
+  const floorSelected = !!(S.venue && S.floor);
+  patrolBtn.style.display = (floorSelected && !S.patrol) ? 'inline-block' : 'none';
+
+  // patrol status bar
+  if (S.patrol) {
+    patrolBar.classList.add('active');
+    const cps = S.checkpoints.filter(c => c.venue === S.patrol.venue && c.floor === S.patrol.floor);
+    const done = S.patrol.entries.length;
+    const elapsed = fmtElapsed(S.patrol.startedAt);
+    document.getElementById('patrol-bar-info').innerHTML =
+      `<strong>Patrol active</strong>
+       ${S.patrol.event ? `· <em style="color:#e3b341">${h(S.patrol.event)}</em>` : ''}
+       &nbsp;|&nbsp; ${h(S.patrol.venueName)} · ${h(S.patrol.floor)}
+       ${S.patrol.officer ? `&nbsp;|&nbsp; ${h(S.patrol.officer)}` : ''}
+       &nbsp;|&nbsp; ${done} / ${cps.length} logged &nbsp;|&nbsp; ${elapsed}`;
+  } else {
+    patrolBar.classList.remove('active');
+  }
+}
+
+// ══════════════════════════════════════════
+// STATS BAR
+// ══════════════════════════════════════════
+
+function updateStats() {
+  const bar = document.getElementById('stats-bar');
+  if (!S.venue || !S.floor) { bar.innerHTML = ''; return; }
+  const cps = S.checkpoints.filter(c => c.venue === S.venue && c.floor === S.floor);
+  const counts = {};
+  cps.forEach(c => counts[c.type] = (counts[c.type]||0)+1);
+  const typeParts = Object.entries(counts).map(([t, n]) =>
+    `<span class="stat"><span class="stat-dot" style="background:${TYPE_COLORS[t]||'#ccc'}"></span>${t}: ${n}</span>`
+  ).join('');
+  const high = cps.filter(c => c.priority==='High').length;
+  const active = cps.filter(c => c.status==='Active').length;
+  bar.innerHTML = `${typeParts}<span style="margin-left:auto;color:#6e7681">${active} active · ${high} high priority · ${cps.length} total</span>`;
+}
+
+// ══════════════════════════════════════════
+// EXPORT / RESET
+// ══════════════════════════════════════════
+
+function exportCheckpoints() {
+  const cps = (S.venue && S.floor)
+    ? S.checkpoints.filter(c => c.venue===S.venue && c.floor===S.floor)
+    : S.checkpoints;
+  const payload = { exported: new Date().toISOString(), venue: S.venue||'all', floor: S.floor||'all', checkpoints: cps };
+  const blob = new Blob([JSON.stringify(payload, null, 2)], {type:'application/json'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `checkpoints-${S.venue||'all'}-${Date.now()}.json`;
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+function resetToDefaults() {
+  if (!confirm('Reset ALL checkpoints to the AI-suggested defaults? This will erase any custom changes.')) return;
+  S.checkpoints = deepClone(DEFAULTS);
+  S.selectedId = null;
+  persist();
+  renderSidebar();
+  renderMarkers();
+  renderPanel();
+  updateStats();
+}
+
+// ══════════════════════════════════════════
+// UTIL
+// ══════════════════════════════════════════
+
+function h(s) {
+  return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// ══════════════════════════════════════════
+// VENUE / FLOOR MANAGEMENT
+// ══════════════════════════════════════════
+
+let _modalMode = null; // 'venue' | 'floor' | 'replace-floor' | 'start-patrol'
+let _modalVenueKey = null;
+let _replacingFloor = null;
+let _pendingFile = null;
+
+function openVenueModal() {
+  _modalMode = 'venue';
+  _modalVenueKey = null;
+  _pendingFile = null;
+  document.getElementById('modal-title').textContent = 'Add Venue';
+  document.getElementById('modal-confirm').textContent = 'Add Venue';
+  document.getElementById('modal-body').innerHTML = `
+    <div class="fg">
+      <label class="flabel">Venue Name</label>
+      <input class="finput" id="mv-name" placeholder="e.g. Rogers Arena" autofocus>
+    </div>
+    <div class="fg">
+      <label class="flabel">Short Code</label>
+      <input class="finput" id="mv-code" placeholder="e.g. RA  (used as ID, no spaces)" maxlength="10">
+    </div>`;
+  document.getElementById('modal-overlay').classList.add('open');
+  setTimeout(() => document.getElementById('mv-name')?.focus(), 50);
+}
+
+function openFloorModal(evt, venueKey) {
+  evt.stopPropagation();
+  _modalMode = 'floor';
+  _modalVenueKey = venueKey;
+  _pendingFile = null;
+  const venues = allVenues();
+  const vname = venues[venueKey]?.name || venueKey;
+  document.getElementById('modal-title').textContent = `Add Floor Map — ${vname}`;
+  document.getElementById('modal-confirm').textContent = 'Add Floor';
+  document.getElementById('modal-body').innerHTML = `
+    <div class="fg">
+      <label class="flabel">Floor / Level Name</label>
+      <input class="finput" id="mf-name" placeholder="e.g. Level 2, Ground Floor, Exterior">
+    </div>
+    <div class="fg" style="margin-top:4px">
+      <label class="flabel">Map File</label>
+      <div class="file-drop" id="file-drop-zone">
+        <input type="file" accept="image/*,application/pdf" onchange="handleFileSelect(this)">
+        <div class="file-drop-icon">🗺</div>
+        <div class="file-drop-text">Drop map file here or click to browse</div>
+        <div class="file-drop-hint">Supports JPG, PNG, PDF</div>
+      </div>
+      <div class="file-selected" id="file-selected-name" style="display:none"></div>
+    </div>`;
+  document.getElementById('modal-overlay').classList.add('open');
+
+  // drag-over styling
+  const zone = document.getElementById('file-drop-zone');
+  zone.addEventListener('dragover',  e => { e.preventDefault(); zone.classList.add('drag-over'); });
+  zone.addEventListener('dragleave', () => zone.classList.remove('drag-over'));
+  zone.addEventListener('drop', e => {
+    e.preventDefault(); zone.classList.remove('drag-over');
+    const file = e.dataTransfer.files[0];
+    if (file) loadPendingFile(file);
+  });
+  setTimeout(() => document.getElementById('mf-name')?.focus(), 50);
+}
+
+function handleFileSelect(input) {
+  const file = input.files[0];
+  if (file) loadPendingFile(file);
+}
+
+function loadPendingFile(file) {
+  const MAX_MB = 15;
+  if (file.size > MAX_MB * 1024 * 1024) {
+    alert(`File is ${(file.size/1024/1024).toFixed(1)} MB. Maximum is ${MAX_MB} MB.`);
+    return;
+  }
+  const reader = new FileReader();
+  reader.onload = e => {
+    const kind = file.type === 'application/pdf' ? 'pdf' : 'image';
+    _pendingFile = { name: file.name, kind, data: e.target.result };
+    const el = document.getElementById('file-selected-name');
+    if (el) { el.textContent = '✓ ' + file.name; el.style.display = 'block'; }
+    const zone = document.getElementById('file-drop-zone');
+    if (zone) zone.style.borderColor = '#3fb950';
+  };
+  reader.readAsDataURL(file);
+}
+
+function modalConfirm() {
+  if (_modalMode === 'venue') confirmAddVenue();
+  else if (_modalMode === 'floor') confirmAddFloor();
+  else if (_modalMode === 'replace-floor') confirmReplaceFloor();
+  else if (_modalMode === 'start-patrol') confirmStartPatrol();
+}
+
+function confirmReplaceFloor() {
+  if (!_pendingFile) { alert('Please select a map file.'); return; }
+  const venueKey  = _modalVenueKey;
+  const floorName = _replacingFloor;
+  const fileId = 'f-' + Date.now();
+  try {
+    localStorage.setItem('scp-file-' + fileId, _pendingFile.data);
+  } catch(e) {
+    alert('Could not save file — storage may be full. Try a smaller image or PDF.');
+    return;
+  }
+  // remove old override file if any
+  const old = S.addedFloors[venueKey]?.[floorName];
+  if (old) localStorage.removeItem('scp-file-' + old.fileId);
+  // un-hide if it was hidden
+  if (S.hiddenFloors[venueKey]) {
+    S.hiddenFloors[venueKey] = S.hiddenFloors[venueKey].filter(f => f !== floorName);
+  }
+  if (!S.addedFloors[venueKey]) S.addedFloors[venueKey] = {};
+  S.addedFloors[venueKey][floorName] = { kind: _pendingFile.kind, fileId };
+  persistCustom();
+  closeModal();
+  S.venue = venueKey; S.floor = floorName;
+  renderSidebar(); renderMap(); renderPanel(); updateToolbar(); updateStats();
+}
+
+function confirmStartPatrol() {
+  // Gather checked roster officers
+  const checked = [...document.querySelectorAll('#sp-officer-list input[type=checkbox]:checked')]
+    .map(cb => cb.value.trim()).filter(Boolean);
+  // Plus any ad-hoc name
+  const other = (document.getElementById('sp-officer-other')?.value || '').trim();
+  if (other) checked.push(other);
+  const event = (document.getElementById('sp-event')?.value || '').trim();
+  S.patrol = {
+    id: 'patrol-' + Date.now(),
+    venue: S.venue,
+    floor: S.floor,
+    venueName: allVenues()[S.venue]?.name || S.venue,
+    officers: checked,
+    officer: checked.join(', '), // backward-compat string
+    event,
+    startedAt: new Date().toISOString(),
+    endedAt: null,
+    entries: [],
+  };
+  S.openLogForm = null;
+  closeModal();
+  updateToolbar();
+  switchTab('patrol');
+  if (window._patrolTimer) clearInterval(window._patrolTimer);
+  window._patrolTimer = setInterval(() => { if (S.patrol) updateToolbar(); }, 30000);
+}
+
+function confirmAddVenue() {
+  const name = document.getElementById('mv-name')?.value.trim();
+  const code = document.getElementById('mv-code')?.value.trim().replace(/\s+/g,'_').toUpperCase();
+  if (!name) { alert('Please enter a venue name.'); return; }
+  if (!code) { alert('Please enter a short code.'); return; }
+  const key = 'custom-' + code;
+  if (allVenues()[key]) { alert(`A venue with code "${code}" already exists.`); return; }
+  S.customVenues[key] = { name };
+  persistCustom();
+  closeModal();
+  renderSidebar();
+  // Auto-open the new venue and prompt for a floor
+  S.venue = key;
+  renderSidebar();
+  openFloorModal({ stopPropagation: () => {} }, key);
+}
+
+function confirmAddFloor() {
+  const floorName = document.getElementById('mf-name')?.value.trim();
+  if (!floorName) { alert('Please enter a floor name.'); return; }
+  if (!_pendingFile) { alert('Please select a map file.'); return; }
+
+  const fileId = 'f-' + Date.now();
+  try {
+    localStorage.setItem('scp-file-' + fileId, _pendingFile.data);
+  } catch(e) {
+    alert('Could not save file — storage may be full. Try a smaller image or PDF.');
+    return;
+  }
+
+  if (!S.addedFloors[_modalVenueKey]) S.addedFloors[_modalVenueKey] = {};
+  S.addedFloors[_modalVenueKey][floorName] = { kind: _pendingFile.kind, fileId };
+  persistCustom();
+  closeModal();
+
+  // Auto-select the new floor
+  S.venue = _modalVenueKey;
+  S.floor = floorName;
+  renderSidebar();
+  renderMap();
+  renderPanel();
+  updateToolbar();
+  updateStats();
+}
+
+function deleteVenue(evt, venueKey) {
+  evt.stopPropagation();
+  const isBuiltIn = !!VENUES[venueKey];
+  const name = VENUES[venueKey]?.name || S.customVenues[venueKey]?.name || venueKey;
+  const msg = isBuiltIn
+    ? `Hide built-in venue "${name}"? Its floors and checkpoints will be removed from the app. You can restore it by clicking ↺ Reset Venues.`
+    : `Delete venue "${name}" and all its custom floors?`;
+  if (!confirm(msg)) return;
+  // remove uploaded floor files
+  const floors = S.addedFloors[venueKey] || {};
+  Object.values(floors).forEach(fd => localStorage.removeItem('scp-file-' + fd.fileId));
+  delete S.addedFloors[venueKey];
+  if (isBuiltIn) {
+    S.hiddenVenues.push(venueKey);
+    delete S.hiddenFloors[venueKey];
+  } else {
+    delete S.customVenues[venueKey];
+  }
+  S.checkpoints = S.checkpoints.filter(c => c.venue !== venueKey);
+  if (S.venue === venueKey) { S.venue = null; S.floor = null; }
+  persist(); persistCustom();
+  renderSidebar(); renderMap(); renderPanel(); updateToolbar(); updateStats();
+}
+
+function deleteFloor(evt, venueKey, floorName) {
+  evt.stopPropagation();
+  const isBuiltIn = !!VENUES[venueKey]?.floors[floorName];
+  const msg = isBuiltIn
+    ? `Hide built-in floor "${floorName}"? Its checkpoints will be removed. You can restore it via ↺ Reset Venues.`
+    : `Delete floor "${floorName}"? Its checkpoints will also be removed.`;
+  if (!confirm(msg)) return;
+  // remove uploaded override if any
+  const fd = S.addedFloors[venueKey]?.[floorName];
+  if (fd) localStorage.removeItem('scp-file-' + fd.fileId);
+  if (S.addedFloors[venueKey]) delete S.addedFloors[venueKey][floorName];
+  if (isBuiltIn) {
+    if (!S.hiddenFloors[venueKey]) S.hiddenFloors[venueKey] = [];
+    if (!S.hiddenFloors[venueKey].includes(floorName)) S.hiddenFloors[venueKey].push(floorName);
+  }
+  S.checkpoints = S.checkpoints.filter(c => !(c.venue === venueKey && c.floor === floorName));
+  if (S.venue === venueKey && S.floor === floorName) { S.floor = null; }
+  persist(); persistCustom();
+  renderSidebar(); renderMap(); renderPanel(); updateToolbar(); updateStats();
+}
+
+function replaceFloor(evt, venueKey, floorName) {
+  evt.stopPropagation();
+  _modalVenueKey = venueKey;
+  _replacingFloor = floorName;
+  document.getElementById('modal-title').textContent = `Replace Map: ${floorName}`;
+  document.getElementById('modal-confirm').textContent = 'Replace Map';
+  document.getElementById('modal-body').innerHTML = `
+    <div style="font-size:12px;color:#8b949e;margin-bottom:12px">
+      Upload a new map file to replace the built-in <strong style="color:#c9d1d9">${h(floorName)}</strong> map.
+    </div>
+    <div class="file-drop" id="file-drop-zone">
+      <input type="file" accept=".jpg,.jpeg,.png,.pdf" onchange="handleFileSelect(event)">
+      <div class="file-drop-icon">📁</div>
+      <div class="file-drop-text">Click or drag a file here</div>
+      <div class="file-drop-hint">JPG, PNG or PDF · max 15 MB</div>
+    </div>
+    <div id="file-selected-name"></div>`;
+  _modalMode = 'replace-floor';
+  document.getElementById('modal-overlay').classList.add('open');
+}
+
+function restoreVenues() {
+  if (!confirm('Restore all hidden built-in venues and floors to defaults?')) return;
+  S.hiddenVenues = [];
+  S.hiddenFloors = {};
+  persistCustom();
+  renderSidebar(); renderMap(); renderPanel(); updateToolbar(); updateStats();
+}
+
+function closeModal(evt) {
+  if (evt && evt.target !== document.getElementById('modal-overlay')) return;
+  document.getElementById('modal-overlay').classList.remove('open');
+  _modalMode = null; _pendingFile = null;
+}
+
+// close on Escape handled in keyboard shortcuts
+
+// ══════════════════════════════════════════
+// PATROL
+// ══════════════════════════════════════════
+
+function startPatrol() {
+  if (!S.venue || !S.floor) return;
+
+  const officerChecks = S.officers.length
+    ? `<div class="officer-checklist" id="sp-officer-list">
+        ${S.officers.map((name, i) => `
+          <div class="officer-check-item" onclick="document.getElementById('sp-chk-${i}').click()">
+            <input type="checkbox" id="sp-chk-${i}" value="${h(name)}">
+            <label for="sp-chk-${i}">${h(name)}</label>
+          </div>`).join('')}
+       </div>
+       <div style="margin-top:6px">
+         <label class="flabel">Other / Ad-hoc Officer</label>
+         <input class="finput" id="sp-officer-other" placeholder="Type name if not in roster">
+       </div>`
+    : `<div style="font-size:11px;color:#8b949e;margin-bottom:8px">No officers in roster — <a href="#" onclick="closeModal();addOfficer();return false" style="color:#58a6ff">add officers</a> in the sidebar, or enter below.</div>
+       <input class="finput" id="sp-officer-other" placeholder="Officer name / callsign">`;
+
+  document.getElementById('modal-title').textContent = 'Start Patrol';
+  document.getElementById('modal-confirm').textContent = '▶ Start Patrol';
+  document.getElementById('modal-body').innerHTML = `
+    <div class="fg">
+      <label class="flabel">Officers On Duty</label>
+      ${officerChecks}
+    </div>
+    <div class="fg">
+      <label class="flabel">Event Name</label>
+      <input class="finput" id="sp-event" placeholder="e.g. Whitecaps FC vs Toronto FC">
+    </div>
+    <div style="font-size:11px;color:#8b949e;margin-top:2px">
+      ${h(allVenues()[S.venue]?.name || S.venue)} · ${h(S.floor)}
+    </div>`;
+  _modalMode = 'start-patrol';
+  document.getElementById('modal-overlay').classList.add('open');
+  setTimeout(() => document.getElementById('sp-event')?.focus(), 50);
+}
+
+function endPatrol() {
+  if (!S.patrol) return;
+  const cps = S.checkpoints.filter(c => c.venue === S.patrol.venue && c.floor === S.patrol.floor);
+  const unlogged = cps.filter(cp => !S.patrol.entries.find(e => e.checkpointId === cp.id));
+  if (unlogged.length > 0) {
+    const ok = confirm(`${unlogged.length} checkpoint(s) not yet logged. End patrol anyway?`);
+    if (!ok) return;
+  }
+  S.patrol.endedAt = new Date().toISOString();
+  S.patrolLogs.unshift(S.patrol); // newest first
+  S.patrol = null;
+  S.openLogForm = null;
+  if (window._patrolTimer) { clearInterval(window._patrolTimer); window._patrolTimer = null; }
+  persistPatrol();
+  updateToolbar();
+  renderPatrolPanel();
+}
+
+function toggleLogForm(cpId) {
+  S.openLogForm = S.openLogForm === cpId ? null : cpId;
+  renderPatrolPanel();
+}
+
+function saveLogEntry(cpId) {
+  if (!S.patrol) return;
+  const statusEl = document.querySelector('.pf-status-btn.sel-' + (document.querySelector('[data-pf-status].sel') ? document.querySelector('[data-pf-status].sel').dataset.pfStatus : ''));
+  const status   = document.getElementById('pf-status-' + cpId)?.value || 'Clear';
+  const notes    = (document.getElementById('pf-notes-'  + cpId)?.value || '').trim();
+  const officerRaw = document.getElementById('pf-officer-'+ cpId)?.value || '';
+  const officer = officerRaw === '__other__'
+    ? (prompt('Enter officer name:') || '').trim()
+    : officerRaw.trim();
+  const tsRaw    = document.getElementById('pf-ts-'     + cpId)?.value || '';
+  const ts       = tsRaw ? new Date(tsRaw).toISOString() : new Date().toISOString();
+
+  const cp = S.checkpoints.find(c => c.id === cpId);
+  // Remove previous entry for this checkpoint if exists (re-log)
+  S.patrol.entries = S.patrol.entries.filter(e => e.checkpointId !== cpId);
+  S.patrol.entries.push({
+    checkpointId:   cpId,
+    checkpointName: cp?.name || cpId,
+    checkpointType: cp?.type || '',
+    loggedAt: ts,
+    status,
+    notes,
+    officer: officer || patrolOfficerLabel(S.patrol),
+  });
+  S.openLogForm = null;
+  updateToolbar();
+  renderPatrolPanel();
+}
+
+function renderPatrolPanel() {
+  const el = document.getElementById('panel-content');
+
+  // ── ACTIVE PATROL ──
+  if (S.patrol) {
+    const isCurrentFloor = S.patrol.venue === S.venue && S.patrol.floor === S.floor;
+    const cps = S.checkpoints.filter(c => c.venue === S.patrol.venue && c.floor === S.patrol.floor);
+    const done = S.patrol.entries.length;
+    const pct  = cps.length ? Math.round(done / cps.length * 100) : 0;
+
+    let html = `<div class="patrol-header">
+      <div class="patrol-header-title">
+        <span style="color:#3fb950">▶</span> Active Patrol
+      </div>
+      <div class="patrol-meta">
+        ${S.patrol.event ? `<span style="color:#e3b341;font-weight:600">${h(S.patrol.event)}</span>` : ''}
+        <span><strong style="color:#c9d1d9">${h(S.patrol.venueName)}</strong> · ${h(S.patrol.floor)}</span>
+        <span>Started: ${fmtDateTime(S.patrol.startedAt)}</span>
+        ${patrolOfficerLabel(S.patrol) ? `<span>Officers: <strong style="color:#c9d1d9">${h(patrolOfficerLabel(S.patrol))}</strong></span>` : ''}
+        <span style="color:${done===cps.length?'#3fb950':'#8b949e'}">${done} / ${cps.length} checkpoints logged</span>
+      </div>
+      <div class="patrol-progress"><div class="patrol-progress-fill" style="width:${pct}%"></div></div>
+    </div>`;
+
+    if (!isCurrentFloor) {
+      html += `<div class="empty" style="padding:16px">
+        <div class="empty-icon">📍</div>
+        <p>Patrol is on <strong>${h(VENUES[S.patrol.venue].name)} · ${h(S.patrol.floor)}</strong>.<br>
+        <a href="#" onclick="selectFloor('${S.patrol.venue}','${S.patrol.floor.replace(/'/g,"\\'")}');return false" style="color:#58a6ff">Switch to that floor</a></p>
+      </div>`;
+    } else {
+      cps.forEach(cp => {
+        const entry  = S.patrol.entries.find(e => e.checkpointId === cp.id);
+        const status = entry?.status || '';
+        const col    = TYPE_COLORS[cp.type] || '#ccc';
+        const icon   = status === 'Clear' ? '✓' : status === 'Issue' ? '!' : status === 'Skipped' ? '~' : '';
+        const isOpen = S.openLogForm === cp.id;
+        const now    = new Date();
+        const localDT = new Date(now.getTime() - now.getTimezoneOffset()*60000).toISOString().slice(0,16);
+
+        html += `<div class="cp-patrol-item${status ? ' logged-'+status : ''}">
+          <div class="cp-patrol-row" onclick="toggleLogForm('${cp.id}')">
+            <div class="cp-patrol-status">${icon}</div>
+            <div style="flex:1;min-width:0">
+              <div class="cp-patrol-name">${h(cp.name)}</div>
+              <div style="font-size:10px;color:${col}">${cp.type} · ${cp.priority}</div>
+            </div>
+            ${entry ? `<div class="cp-patrol-time">${fmtTime(entry.loggedAt)}</div>` : ''}
+            <span style="font-size:10px;color:#484f58;margin-left:4px">${isOpen?'▲':'▼'}</span>
+          </div>
+          <div class="cp-patrol-form ${isOpen?'open':''}">
+            <div style="font-size:10px;color:#8b949e;margin-top:8px;margin-bottom:4px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px">Status</div>
+            <div class="pf-status-btns">
+              <button class="pf-status-btn${status==='Clear'?' sel-Clear':''}"   onclick="setPFStatus('${cp.id}','Clear')"   id="psb-Clear-${cp.id}">✓ Clear</button>
+              <button class="pf-status-btn${status==='Issue'?' sel-Issue':''}"   onclick="setPFStatus('${cp.id}','Issue')"   id="psb-Issue-${cp.id}">⚠ Issue</button>
+              <button class="pf-status-btn${status==='Skipped'?' sel-Skipped':''}" onclick="setPFStatus('${cp.id}','Skipped')" id="psb-Skipped-${cp.id}">– Skip</button>
+            </div>
+            <input type="hidden" id="pf-status-${cp.id}" value="${status||'Clear'}">
+            <div class="pf-row" style="margin-top:8px">
+              <div>
+                <div class="flabel">Date &amp; Time</div>
+                <input class="finput" type="datetime-local" id="pf-ts-${cp.id}" value="${entry ? new Date(new Date(entry.loggedAt).getTime()-new Date().getTimezoneOffset()*60000).toISOString().slice(0,16) : localDT}">
+              </div>
+              <div>
+                <div class="flabel">Officer</div>
+                ${S.officers.length
+                  ? `<select class="fselect" id="pf-officer-${cp.id}">
+                      <option value="">— select —</option>
+                      ${S.officers.map(o=>`<option value="${h(o)}"${(entry?.officer||patrolOfficerLabel(S.patrol))===o?' selected':''}>${h(o)}</option>`).join('')}
+                      <option value="__other__">Other…</option>
+                     </select>`
+                  : `<input class="finput" id="pf-officer-${cp.id}" placeholder="${h(patrolOfficerLabel(S.patrol)||'name/callsign')}" value="${h(entry?.officer||patrolOfficerLabel(S.patrol)||'')}">`
+                }
+              </div>
+            </div>
+            <div style="margin-top:7px">
+              <div class="flabel">Notes</div>
+              <textarea class="ftextarea" id="pf-notes-${cp.id}" placeholder="Observations, issues, actions taken…" style="min-height:50px">${h(entry?.notes||'')}</textarea>
+            </div>
+            <button class="btn-save-log" onclick="saveLogEntry('${cp.id}')">
+              ${entry ? '↺ Update Log Entry' : '✓ Save Log Entry'}
+            </button>
+          </div>
+        </div>`;
+      });
+    }
+
+    html += `<button class="btn-end-patrol" style="width:100%;margin-top:10px;padding:8px" onclick="endPatrol()">⏹ End &amp; Save Patrol</button>`;
+    el.innerHTML = html;
+    return;
+  }
+
+  // ── HISTORY ──
+  if (!S.patrolLogs.length) {
+    el.innerHTML = `<div class="empty"><div class="empty-icon">🗓</div>
+      <p>No patrol history yet.<br>Select a floor and click <strong>▶ Start Patrol</strong> in the toolbar to begin.</p></div>`;
+    return;
+  }
+
+  let html = `<div style="font-size:11px;color:#8b949e;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center">
+    <span>${S.patrolLogs.length} patrol${S.patrolLogs.length!==1?'s':''} logged</span>
+    <button class="btn btn-sec" style="font-size:10px;padding:3px 8px" onclick="clearPatrolHistory()">Clear history</button>
+  </div>`;
+
+  S.patrolLogs.forEach((patrol, idx) => {
+    const isOpen = !!S.patrolExpanded[patrol.id];
+    const dur    = patrol.endedAt ? fmtDuration(patrol.startedAt, patrol.endedAt) : 'ongoing';
+    const cps    = S.checkpoints.filter(c => c.venue === patrol.venue && c.floor === patrol.floor);
+    const issues = patrol.entries.filter(e => e.status === 'Issue').length;
+
+    html += `<div class="history-patrol">
+      <div class="history-patrol-header" onclick="toggleHistory('${patrol.id}')">
+        <div class="history-info">
+          <div class="history-title">${fmtDate(patrol.startedAt)} · ${h(patrol.venueName||patrol.venue)}${patrol.event?' · <span style="color:#e3b341">'+h(patrol.event)+'</span>':''}</div>
+          <div class="history-sub">${h(patrol.floor)}${patrolOfficerLabel(patrol)?' · '+h(patrolOfficerLabel(patrol)):''} · ${dur}${issues?' · <span style="color:#f85149">'+issues+' issue'+(issues!==1?'s':'')+'</span>':''}</div>
+        </div>
+        <span class="history-badge">${patrol.entries.length}/${cps.length}</span>
+        <span style="font-size:10px;color:#484f58;margin-left:6px">${isOpen?'▲':'▼'}</span>
+      </div>
+      <div class="history-entries ${isOpen?'open':''}">
+        ${patrol.entries.length ? patrol.entries.map(e => `
+          <div class="history-entry">
+            <div class="he-status he-${e.status}">${e.status==='Clear'?'✓':e.status==='Issue'?'!':'~'}</div>
+            <div class="he-body">
+              <div class="he-name">${h(e.checkpointName)}</div>
+              <div class="he-time">${fmtDateTime(e.loggedAt)}${e.officer?' · '+h(e.officer):''}</div>
+              ${e.notes?`<div class="he-notes">${h(e.notes)}</div>`:''}
+            </div>
+          </div>`).join('') : '<div style="padding:10px 12px;font-size:11px;color:#484f58">No entries logged.</div>'}
+        <button class="history-export" onclick="exportPatrolPDF(${idx})">⬇ Export PDF Report</button>
+      </div>
+    </div>`;
+  });
+
+  el.innerHTML = html;
+}
+
+function setPFStatus(cpId, status) {
+  const input = document.getElementById('pf-status-' + cpId);
+  if (input) input.value = status;
+  ['Clear','Issue','Skipped'].forEach(s => {
+    const b = document.getElementById('psb-'+s+'-'+cpId);
+    if (b) b.className = 'pf-status-btn' + (s===status?' sel-'+s:'');
+  });
+}
+
+function toggleHistory(id) {
+  S.patrolExpanded[id] = !S.patrolExpanded[id];
+  renderPatrolPanel();
+}
+
+function clearPatrolHistory() {
+  if (!confirm('Clear all patrol history? This cannot be undone.')) return;
+  S.patrolLogs = [];
+  persistPatrol();
+  renderPatrolPanel();
+}
+
+function exportPatrolPDF(idx) {
+  const patrol = S.patrolLogs[idx];
+  if (!patrol) return;
+  const vname    = allVenues()[patrol.venue]?.name || patrol.venue;
+  const dur      = patrol.endedAt ? fmtDuration(patrol.startedAt, patrol.endedAt) : 'Ongoing';
+  const cps      = S.checkpoints.filter(c => c.venue === patrol.venue && c.floor === patrol.floor);
+  const sorted   = [...patrol.entries].sort((a,b) => new Date(a.loggedAt)-new Date(b.loggedAt));
+  const unlogged = cps.filter(cp => !patrol.entries.find(e => e.checkpointId === cp.id));
+  const issues   = patrol.entries.filter(e => e.status === 'Issue').length;
+  const officers = patrolOfficerLabel(patrol) || '—';
+
+  const statusColor = {'Clear':'#1a6b1a','Issue':'#8b1a1a','Skipped':'#6b6b1a'};
+  const statusIcon  = {'Clear':'✓','Issue':'⚠','Skipped':'–'};
+
+  const entryRows = sorted.map((e,i) => `
+    <tr style="background:${i%2?'#f9f9f9':'#fff'}">
+      <td style="padding:7px 10px;border-bottom:1px solid #e0e0e0;font-weight:600;color:#333">${h(e.checkpointName)}</td>
+      <td style="padding:7px 10px;border-bottom:1px solid #e0e0e0;text-align:center">
+        <span style="display:inline-block;padding:2px 10px;border-radius:12px;font-size:11px;font-weight:700;background:${statusColor[e.status]||'#555'};color:#fff">
+          ${statusIcon[e.status]||''} ${e.status}
+        </span>
+      </td>
+      <td style="padding:7px 10px;border-bottom:1px solid #e0e0e0;font-size:12px;color:#555">${fmtDateTime(e.loggedAt)}</td>
+      <td style="padding:7px 10px;border-bottom:1px solid #e0e0e0;font-size:12px;color:#555">${h(e.officer||'—')}</td>
+      <td style="padding:7px 10px;border-bottom:1px solid #e0e0e0;font-size:12px;color:#555;font-style:${e.notes?'normal':'italic'}">${h(e.notes||'—')}</td>
+    </tr>`).join('');
+
+  const unloggedRows = unlogged.map(cp => `
+    <tr>
+      <td style="padding:6px 10px;color:#999;border-bottom:1px solid #f0f0f0" colspan="5">• ${h(cp.name)} <span style="font-size:11px;color:#ccc">(${cp.priority} priority · ${cp.type})</span></td>
+    </tr>`).join('');
+
+  const html = `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Patrol Report – ${h(vname)} – ${patrol.startedAt.slice(0,10)}</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:Arial,sans-serif;color:#222;background:#fff;padding:32px}
+  h1{font-size:22px;color:#1a1a2e;margin-bottom:4px}
+  .subtitle{font-size:13px;color:#666;margin-bottom:24px}
+  .meta-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:24px;background:#f5f7fa;padding:16px;border-radius:8px;border:1px solid #e0e0e0}
+  .meta-item{}
+  .meta-label{font-size:10px;text-transform:uppercase;letter-spacing:0.5px;color:#999;font-weight:700;margin-bottom:2px}
+  .meta-value{font-size:13px;color:#222;font-weight:600}
+  .summary-bar{display:flex;gap:16px;margin-bottom:20px}
+  .summary-chip{flex:1;text-align:center;padding:12px;border-radius:8px;border:1px solid #e0e0e0}
+  .chip-num{font-size:26px;font-weight:800;color:#1a6b1a}
+  .chip-num.issues{color:#8b1a1a}
+  .chip-num.skipped{color:#6b6b1a}
+  .chip-num.miss{color:#999}
+  .chip-label{font-size:11px;color:#888;margin-top:2px}
+  h2{font-size:14px;color:#1a1a2e;margin:20px 0 8px;border-bottom:2px solid #1a1a2e;padding-bottom:4px}
+  table{width:100%;border-collapse:collapse;margin-bottom:16px}
+  th{background:#1a1a2e;color:#fff;padding:8px 10px;text-align:left;font-size:12px}
+  .footer{margin-top:28px;font-size:11px;color:#aaa;text-align:center;border-top:1px solid #e0e0e0;padding-top:12px}
+  @media print{body{padding:16px}@page{margin:15mm}}
+</style>
+</head>
+<body>
+  <h1>🛡 Sweep Manager — Patrol Report</h1>
+  <div class="subtitle">Generated ${fmtDateTime(new Date().toISOString())}</div>
+
+  <div class="meta-grid">
+    <div class="meta-item"><div class="meta-label">Venue</div><div class="meta-value">${h(vname)}</div></div>
+    <div class="meta-item"><div class="meta-label">Floor / Area</div><div class="meta-value">${h(patrol.floor)}</div></div>
+    <div class="meta-item"><div class="meta-label">Event</div><div class="meta-value">${h(patrol.event||'—')}</div></div>
+    <div class="meta-item"><div class="meta-label">Officers</div><div class="meta-value">${h(officers)}</div></div>
+    <div class="meta-item"><div class="meta-label">Started</div><div class="meta-value">${fmtDateTime(patrol.startedAt)}</div></div>
+    <div class="meta-item"><div class="meta-label">Ended</div><div class="meta-value">${patrol.endedAt ? fmtDateTime(patrol.endedAt) : 'Ongoing'}</div></div>
+    <div class="meta-item"><div class="meta-label">Duration</div><div class="meta-value">${dur}</div></div>
+    <div class="meta-item"><div class="meta-label">Coverage</div><div class="meta-value">${patrol.entries.length} / ${cps.length} checkpoints</div></div>
+  </div>
+
+  <div class="summary-bar">
+    <div class="summary-chip"><div class="chip-num">${patrol.entries.filter(e=>e.status==='Clear').length}</div><div class="chip-label">Clear</div></div>
+    <div class="summary-chip"><div class="chip-num issues">${issues}</div><div class="chip-label">Issues</div></div>
+    <div class="summary-chip"><div class="chip-num skipped">${patrol.entries.filter(e=>e.status==='Skipped').length}</div><div class="chip-label">Skipped</div></div>
+    <div class="summary-chip"><div class="chip-num miss">${unlogged.length}</div><div class="chip-label">Not Logged</div></div>
+  </div>
+
+  ${sorted.length ? `
+  <h2>Checkpoint Log</h2>
+  <table>
+    <thead><tr>
+      <th>Checkpoint</th><th>Status</th><th>Date &amp; Time</th><th>Officer</th><th>Notes</th>
+    </tr></thead>
+    <tbody>${entryRows}</tbody>
+  </table>` : ''}
+
+  ${unlogged.length ? `
+  <h2>Not Logged (${unlogged.length})</h2>
+  <table><tbody>${unloggedRows}</tbody></table>` : ''}
+
+  <div class="footer">Sweep Manager · Patrol Report · ${h(vname)} · ${h(patrol.floor)} · ${patrol.startedAt.slice(0,10)}</div>
+</body>
+</html>`;
+
+  const w = window.open('', '_blank', 'width=900,height=700');
+  w.document.write(html);
+  w.document.close();
+  w.focus();
+  setTimeout(() => w.print(), 600);
+}
+
+// ── TIME HELPERS ──
+function fmtDateTime(iso) {
+  if (!iso) return '—';
+  return new Date(iso).toLocaleString(undefined, {month:'short',day:'numeric',year:'numeric',hour:'2-digit',minute:'2-digit'});
+}
+function fmtDate(iso) {
+  if (!iso) return '—';
+  return new Date(iso).toLocaleDateString(undefined, {weekday:'short',month:'short',day:'numeric',year:'numeric'});
+}
+function fmtTime(iso) {
+  if (!iso) return '';
+  return new Date(iso).toLocaleTimeString(undefined, {hour:'2-digit',minute:'2-digit'});
+}
+function fmtDuration(start, end) {
+  const ms = new Date(end) - new Date(start);
+  const m  = Math.floor(ms / 60000);
+  const h2 = Math.floor(m / 60);
+  return h2 > 0 ? `${h2}h ${m%60}m` : `${m}m`;
+}
+function fmtElapsed(start) {
+  return fmtDuration(start, new Date().toISOString());
+}
+
+// ══════════════════════════════════════════
+// KEYBOARD SHORTCUTS
+// ══════════════════════════════════════════
+
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') {
+    if (document.getElementById('modal-overlay').classList.contains('open')) { closeModal(); return; }
+    S.addMode = false; updateToolbar(); document.getElementById('cp-overlay').classList.remove('adding');
+  }
+  if (e.key === 'Delete' && S.selectedId && document.activeElement.tagName !== 'INPUT' && document.activeElement.tagName !== 'TEXTAREA') deleteCP(S.selectedId);
+});
+
+// ══════════════════════════════════════════
+// START
+// ══════════════════════════════════════════
+
+init();
+</script>
+</body>
+</html>
+
