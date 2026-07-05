@@ -228,6 +228,23 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .officer-check-item input[type=checkbox]{accent-color:#58a6ff;width:14px;height:14px;cursor:pointer;flex-shrink:0}
 .officer-check-item label{font-size:12px;color:#c9d1d9;cursor:pointer;flex:1}
 
+/* ── EMAIL RECIPIENTS SIDEBAR ── */
+#sidebar-emails{border-top:1px solid #30363d;padding:10px 14px;flex-shrink:0}
+#sidebar-emails h3{font-size:10px;text-transform:uppercase;letter-spacing:0.5px;color:#8b949e;margin-bottom:7px;display:flex;align-items:center;justify-content:space-between;gap:6px}
+#sidebar-emails h3 span{flex:1}
+.email-list-inner{display:flex;flex-direction:column;gap:3px;margin-bottom:6px;max-height:110px;overflow-y:auto}
+.email-item{display:flex;align-items:center;gap:4px;padding:4px 7px;border-radius:4px;background:#21262d;font-size:11px;color:#c9d1d9}
+.email-item-addr{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:10px}
+.email-item-btns{display:flex;gap:2px;flex-shrink:0}
+.email-action-btn{background:none;border:none;color:#484f58;cursor:pointer;font-size:10px;padding:1px 3px;border-radius:3px;line-height:1}
+.email-action-btn:hover{color:#c9d1d9}
+.email-action-btn.del:hover{color:#f85149}
+.btn-add-email{width:100%;padding:5px;background:transparent;border:1px dashed #30363d;border-radius:5px;color:#8b949e;cursor:pointer;font-size:11px;transition:all 0.15s;text-align:center}
+.btn-add-email:hover{border-color:#58a6ff;color:#58a6ff}
+/* email send button in patrol history */
+.btn-email-report{display:block;width:100%;margin-top:5px;padding:6px;background:rgba(31,111,235,0.1);border:1px solid rgba(31,111,235,0.35);border-radius:5px;color:#79c0ff;cursor:pointer;font-size:11px;font-weight:500;text-align:center}
+.btn-email-report:hover{background:#1f6feb;color:#fff}
+
 /* ── SCROLLBAR ── */
 ::-webkit-scrollbar{width:5px;height:5px}
 ::-webkit-scrollbar-track{background:transparent}
@@ -251,6 +268,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
   <div id="sidebar-officers">
     <h3><span>Officers</span><button class="btn-add-officer" style="width:auto;padding:2px 8px;font-size:10px;border-radius:4px" onclick="addOfficer()">＋ Add</button></h3>
     <div id="officer-list-inner" class="officer-list-inner"></div>
+  </div>
+  <div id="sidebar-emails">
+    <h3><span>Report Emails</span><button class="btn-add-email" style="width:auto;padding:2px 8px;font-size:10px;border-radius:4px" onclick="addEmail()">＋ Add</button></h3>
+    <div id="email-list-inner" class="email-list-inner"></div>
   </div>
   <div id="sidebar-legend">
     <h3>Checkpoint Types</h3>
@@ -517,6 +538,7 @@ const S = {
   addedFloors: {},    // { venueKey: { floorName: { kind, fileId } } }
   hiddenVenues: [],   // built-in venue keys that were hidden/deleted
   hiddenFloors: {},   // { venueKey: [floorName, ...] } built-in floors hidden
+  emailList: [],      // ['name <addr>', ...] report recipients
   // officers roster
   officers: [],      // ['Officer Smith', 'Unit 4', ...]
   // patrol
@@ -557,6 +579,10 @@ function init() {
     S.officers = off ? JSON.parse(off) : [];
   } catch(e) { S.officers = []; }
   try {
+    const el = localStorage.getItem('scp-email-list');
+    S.emailList = el ? JSON.parse(el) : [];
+  } catch(e) { S.emailList = []; }
+  try {
     const hv = localStorage.getItem('scp-hidden-venues');
     S.hiddenVenues = hv ? JSON.parse(hv) : [];
   } catch(e) { S.hiddenVenues = []; }
@@ -567,6 +593,7 @@ function init() {
   buildLegend();
   renderSidebar();
   renderOfficers();
+  renderEmailList();
 }
 
 function persistCustom() {
@@ -654,6 +681,114 @@ function deleteOfficer(idx) {
 function patrolOfficerLabel(patrol) {
   if (patrol.officers && patrol.officers.length) return patrol.officers.join(', ');
   return patrol.officer || '';
+}
+
+// ── Email recipients ──
+function persistEmails() {
+  localStorage.setItem('scp-email-list', JSON.stringify(S.emailList));
+}
+
+function renderEmailList() {
+  const el = document.getElementById('email-list-inner');
+  if (!el) return;
+  if (!S.emailList.length) {
+    el.innerHTML = '<div style="font-size:11px;color:#484f58;padding:2px 0">No recipients added yet.</div>';
+    return;
+  }
+  el.innerHTML = S.emailList.map((addr, i) => `
+    <div class="email-item">
+      <span class="email-item-addr" title="${h(addr)}">${h(addr)}</span>
+      <span class="email-item-btns">
+        <button class="email-action-btn" title="Edit" onclick="editEmail(${i})">✎</button>
+        <button class="email-action-btn del" title="Remove" onclick="deleteEmail(${i})">✕</button>
+      </span>
+    </div>`).join('');
+}
+
+function addEmail() {
+  const addr = prompt('Email address:');
+  if (!addr || !addr.trim()) return;
+  const trimmed = addr.trim();
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed)) { alert('Please enter a valid email address.'); return; }
+  if (S.emailList.includes(trimmed)) { alert('That address is already in the list.'); return; }
+  S.emailList.push(trimmed);
+  persistEmails();
+  renderEmailList();
+}
+
+function editEmail(idx) {
+  const current = S.emailList[idx];
+  const updated = prompt('Edit email address:', current);
+  if (!updated || !updated.trim()) return;
+  const trimmed = updated.trim();
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed)) { alert('Please enter a valid email address.'); return; }
+  S.emailList[idx] = trimmed;
+  persistEmails();
+  renderEmailList();
+}
+
+function deleteEmail(idx) {
+  S.emailList.splice(idx, 1);
+  persistEmails();
+  renderEmailList();
+}
+
+function emailPatrolReport(idx) {
+  const patrol = S.patrolLogs[idx];
+  if (!patrol) return;
+  if (!S.emailList.length) {
+    alert('No email recipients configured. Add addresses in the "Report Emails" section of the sidebar.');
+    return;
+  }
+  const vname    = allVenues()[patrol.venue]?.name || patrol.venue;
+  const dur      = patrol.endedAt ? fmtDuration(patrol.startedAt, patrol.endedAt) : 'Ongoing';
+  const cps      = S.checkpoints.filter(c => c.venue === patrol.venue && c.floor === patrol.floor);
+  const sorted   = [...patrol.entries].sort((a,b) => new Date(a.loggedAt)-new Date(b.loggedAt));
+  const unlogged = cps.filter(cp => !patrol.entries.find(e => e.checkpointId === cp.id));
+  const officers = patrolOfficerLabel(patrol) || '—';
+  const issues   = patrol.entries.filter(e => e.status === 'Issue').length;
+
+  const lines = [
+    'SWEEP MANAGER — PATROL REPORT',
+    '═'.repeat(44),
+    '',
+    `Venue:     ${vname}`,
+    `Floor:     ${patrol.floor}`,
+    `Event:     ${patrol.event || '—'}`,
+    `Officers:  ${officers}`,
+    `Started:   ${fmtDateTime(patrol.startedAt)}`,
+    `Ended:     ${patrol.endedAt ? fmtDateTime(patrol.endedAt) : 'Ongoing'}`,
+    `Duration:  ${dur}`,
+    `Coverage:  ${patrol.entries.length} / ${cps.length} checkpoints`,
+    `Issues:    ${issues}`,
+    '',
+    '─'.repeat(44),
+    'CHECKPOINT LOG',
+    '─'.repeat(44),
+  ];
+
+  sorted.forEach((e, i) => {
+    lines.push(`\n[${i+1}] ${e.checkpointName}`);
+    lines.push(`    Status:  ${e.status}`);
+    lines.push(`    Time:    ${fmtDateTime(e.loggedAt)}`);
+    if (e.officer) lines.push(`    Officer: ${e.officer}`);
+    if (e.notes)   lines.push(`    Notes:   ${e.notes}`);
+  });
+
+  if (unlogged.length) {
+    lines.push('\n' + '─'.repeat(44));
+    lines.push('NOT LOGGED');
+    lines.push('─'.repeat(44));
+    unlogged.forEach(cp => lines.push(`  • ${cp.name} (${cp.priority})`));
+  }
+
+  lines.push('\n' + '═'.repeat(44));
+  lines.push(`Generated: ${fmtDateTime(new Date().toISOString())}`);
+
+  const subject = encodeURIComponent(`Patrol Report — ${vname} · ${patrol.floor} · ${patrol.startedAt.slice(0,10)}`);
+  const body    = encodeURIComponent(lines.join('\n'));
+  const to      = S.emailList.join(',');
+  window.location.href = `mailto:${to}?subject=${subject}&body=${body}`;
 }
 
 function persist() {
@@ -1493,12 +1628,16 @@ function endPatrol() {
   }
   S.patrol.endedAt = new Date().toISOString();
   S.patrolLogs.unshift(S.patrol); // newest first
+  const completedIdx = 0;
   S.patrol = null;
   S.openLogForm = null;
   if (window._patrolTimer) { clearInterval(window._patrolTimer); window._patrolTimer = null; }
   persistPatrol();
   updateToolbar();
   renderPatrolPanel();
+  if (S.emailList.length && confirm('Patrol saved. Send report to ' + S.emailList.length + ' recipient' + (S.emailList.length !== 1 ? 's' : '') + '?')) {
+    emailPatrolReport(completedIdx);
+  }
 }
 
 function toggleLogForm(cpId) {
@@ -1664,7 +1803,10 @@ function renderPatrolPanel() {
               ${e.notes?`<div class="he-notes">${h(e.notes)}</div>`:''}
             </div>
           </div>`).join('') : '<div style="padding:10px 12px;font-size:11px;color:#484f58">No entries logged.</div>'}
-        <button class="history-export" onclick="exportPatrolPDF(${idx})">⬇ Export PDF Report</button>
+        <div style="display:flex;gap:5px;padding:8px 12px;border-top:1px solid #21262d">
+          <button class="history-export" style="flex:1;margin:0" onclick="exportPatrolPDF(${idx})">⬇ PDF</button>
+          <button class="btn-email-report" style="flex:1;margin:0" onclick="emailPatrolReport(${idx})">✉ Email</button>
+        </div>
       </div>
     </div>`;
   });
