@@ -801,12 +801,19 @@ function emailPatrolReport(idx) {
   lines.push('\n' + '═'.repeat(44));
   lines.push(`Generated: ${fmtDateTime(new Date().toISOString())}`);
 
-  const subject   = encodeURIComponent(`Patrol Report — ${vname} · ${patrol.floor} · ${patrol.startedAt.slice(0,10)}`);
-  const body      = encodeURIComponent(lines.join('\n'));
+  const subject    = encodeURIComponent(`Patrol Report — ${vname} · ${patrol.floor} · ${patrol.startedAt.slice(0,10)}`);
+  const body       = encodeURIComponent(lines.join('\n'));
   const recipients = S.emailList.filter(a => a !== S.emailSender);
-  const to        = recipients.join(',');
-  const replyTo   = S.emailSender ? `&reply-to=${encodeURIComponent(S.emailSender)}` : '';
-  window.location.href = `mailto:${to}?subject=${subject}${replyTo}&body=${body}`;
+  // Put first recipient in To, rest in CC — some clients ignore comma-separated To addresses
+  const to         = recipients[0] || '';
+  const cc         = recipients.slice(1).join(',');
+  const ccParam    = cc       ? `&cc=${encodeURIComponent(cc)}`               : '';
+  const replyTo    = S.emailSender ? `&reply-to=${encodeURIComponent(S.emailSender)}` : '';
+  const a = document.createElement('a');
+  a.href = `mailto:${encodeURIComponent(to)}?subject=${subject}${ccParam}${replyTo}&body=${body}`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
 }
 
 function persist() {
