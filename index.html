@@ -538,7 +538,8 @@ const S = {
   addedFloors: {},    // { venueKey: { floorName: { kind, fileId } } }
   hiddenVenues: [],   // built-in venue keys that were hidden/deleted
   hiddenFloors: {},   // { venueKey: [floorName, ...] } built-in floors hidden
-  emailList: [],      // ['name <addr>', ...] report recipients
+  emailList: [],      // [string, ...] report recipient addresses
+  emailSender: null,  // string | null — designated sender (used as Reply-To)
   // officers roster
   officers: [],      // ['Officer Smith', 'Unit 4', ...]
   // patrol
@@ -582,6 +583,10 @@ function init() {
     const el = localStorage.getItem('scp-email-list');
     S.emailList = el ? JSON.parse(el) : [];
   } catch(e) { S.emailList = []; }
+  try {
+    const es = localStorage.getItem('scp-email-sender');
+    S.emailSender = es || null;
+  } catch(e) { S.emailSender = null; }
   try {
     const hv = localStorage.getItem('scp-hidden-venues');
     S.hiddenVenues = hv ? JSON.parse(hv) : [];
@@ -685,7 +690,8 @@ function patrolOfficerLabel(patrol) {
 
 // ── Email recipients ──
 function persistEmails() {
-  localStorage.setItem('scp-email-list', JSON.stringify(S.emailList));
+  localStorage.setItem('scp-email-list',   JSON.stringify(S.emailList));
+  localStorage.setItem('scp-email-sender', S.emailSender || '');
 }
 
 function renderEmailList() {
@@ -695,14 +701,24 @@ function renderEmailList() {
     el.innerHTML = '<div style="font-size:11px;color:#484f58;padding:2px 0">No recipients added yet.</div>';
     return;
   }
-  el.innerHTML = S.emailList.map((addr, i) => `
-    <div class="email-item">
-      <span class="email-item-addr" title="${h(addr)}">${h(addr)}</span>
+  el.innerHTML = S.emailList.map((addr, i) => {
+    const isSender = S.emailSender === addr;
+    return `<div class="email-item" style="${isSender?'border:1px solid #e3b34155;background:#21201a':''}">
+      <button class="email-action-btn" title="${isSender?'Sender (click to unset)':'Set as sender'}" onclick="setSender(${i})" style="color:${isSender?'#e3b341':'#484f58'};font-size:13px;padding:0 3px">★</button>
+      <span class="email-item-addr" title="${h(addr)}">${h(addr)}${isSender?'<span style="font-size:9px;color:#e3b341;margin-left:4px">SENDER</span>':''}</span>
       <span class="email-item-btns">
         <button class="email-action-btn" title="Edit" onclick="editEmail(${i})">✎</button>
         <button class="email-action-btn del" title="Remove" onclick="deleteEmail(${i})">✕</button>
       </span>
-    </div>`).join('');
+    </div>`;
+  }).join('');
+}
+
+function setSender(idx) {
+  const addr = S.emailList[idx];
+  S.emailSender = S.emailSender === addr ? null : addr;
+  persistEmails();
+  renderEmailList();
 }
 
 function addEmail() {
@@ -785,10 +801,12 @@ function emailPatrolReport(idx) {
   lines.push('\n' + '═'.repeat(44));
   lines.push(`Generated: ${fmtDateTime(new Date().toISOString())}`);
 
-  const subject = encodeURIComponent(`Patrol Report — ${vname} · ${patrol.floor} · ${patrol.startedAt.slice(0,10)}`);
-  const body    = encodeURIComponent(lines.join('\n'));
-  const to      = S.emailList.join(',');
-  window.location.href = `mailto:${to}?subject=${subject}&body=${body}`;
+  const subject   = encodeURIComponent(`Patrol Report — ${vname} · ${patrol.floor} · ${patrol.startedAt.slice(0,10)}`);
+  const body      = encodeURIComponent(lines.join('\n'));
+  const recipients = S.emailList.filter(a => a !== S.emailSender);
+  const to        = recipients.join(',');
+  const replyTo   = S.emailSender ? `&reply-to=${encodeURIComponent(S.emailSender)}` : '';
+  window.location.href = `mailto:${to}?subject=${subject}${replyTo}&body=${body}`;
 }
 
 function persist() {
