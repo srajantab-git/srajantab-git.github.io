@@ -245,6 +245,13 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .btn-email-report{display:block;width:100%;margin-top:5px;padding:6px;background:rgba(31,111,235,0.1);border:1px solid rgba(31,111,235,0.35);border-radius:5px;color:#79c0ff;cursor:pointer;font-size:11px;font-weight:500;text-align:center}
 .btn-email-report:hover{background:#1f6feb;color:#fff}
 
+/* ── ZOOM CONTROLS ── */
+#zoom-controls{position:absolute;bottom:14px;right:14px;z-index:50;display:none;flex-direction:column;align-items:center;gap:3px;background:rgba(22,27,34,0.92);border:1px solid #30363d;border-radius:10px;padding:6px 5px;backdrop-filter:blur(6px);box-shadow:0 4px 16px rgba(0,0,0,0.5)}
+#zoom-controls.visible{display:flex}
+.zoom-btn{width:28px;height:28px;background:#21262d;border:1px solid #30363d;border-radius:6px;color:#c9d1d9;font-size:16px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all 0.12s;flex-shrink:0;padding:0}
+.zoom-btn:hover{background:#388bfd;border-color:#388bfd;color:#fff}
+#zoom-level{font-size:10px;color:#8b949e;font-weight:700;letter-spacing:0.3px;min-width:34px;text-align:center;padding:2px 0}
+
 /* ── SCROLLBAR ── */
 ::-webkit-scrollbar{width:5px;height:5px}
 ::-webkit-scrollbar-track{background:transparent}
@@ -302,6 +309,12 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
         <div id="no-map"><div class="no-map-icon">🗺</div><div>Select a venue and floor to begin</div></div>
       </div>
       <div id="cp-overlay" onclick="handleOverlayClick(event)"></div>
+    </div>
+    <div id="zoom-controls">
+      <button class="zoom-btn" onclick="zoomIn()" title="Zoom in">+</button>
+      <span id="zoom-level">100%</span>
+      <button class="zoom-btn" onclick="zoomOut()" title="Zoom out">−</button>
+      <button class="zoom-btn" onclick="resetZoom()" title="Reset zoom" style="font-size:11px">⊙</button>
     </div>
   </div>
   <div id="stats-bar"></div>
@@ -540,6 +553,7 @@ const S = {
   hiddenFloors: {},   // { venueKey: [floorName, ...] } built-in floors hidden
   emailList: [],      // [string, ...] report recipient addresses
   emailSender: null,  // string | null — designated sender (used as Reply-To)
+  zoom: 1.0,          // current map zoom level
   // officers roster
   officers: [],      // ['Officer Smith', 'Unit 4', ...]
   // patrol
@@ -896,6 +910,7 @@ function selectFloor(vk, fl) {
   S.selectedId = null;
   S.addMode = false;
   S.openLogForm = null;
+  S.zoom = 1.0;
   renderSidebar();
   renderMap();
   renderPanel();
@@ -930,29 +945,100 @@ function renderMap() {
     img.onload = () => {
       display.innerHTML = '';
       display.appendChild(img);
-      // size overlay to match image
-      overlay.style.width = img.naturalWidth + 'px';
-      overlay.style.height = img.naturalHeight + 'px';
+      img.style.display = 'block';
+      img.draggable = false;
+      applyZoom();
       renderMarkers();
     };
     img.onerror = () => {
       display.innerHTML = `<div id="no-map"><div class="no-map-icon">⚠️</div><div>Image not found.<br><small style="font-size:10px;color:#484f58">${fd.src}</small></div></div>`;
     };
     img.src = fd.src;
-    img.style.display = 'block';
-    img.style.maxWidth = '100%';
-    img.draggable = false;
   } else {
-    // PDF via object tag
-    const W = 1100, H = 780;
-    display.innerHTML = `<object data="${fd.src}#zoom=page-fit" type="application/pdf" width="${W}" height="${H}">
+    // PDF via object tag — base size, zoom applied by applyZoom()
+    display.innerHTML = `<object data="${fd.src}#zoom=page-fit" type="application/pdf" width="1100" height="780">
       <div id="no-map"><div class="no-map-icon">📄</div><div>Could not display PDF.<br><a href="${fd.src}" target="_blank" style="color:#58a6ff">Open in browser</a></div></div>
     </object>`;
-    overlay.style.width = W + 'px';
-    overlay.style.height = H + 'px';
+    applyZoom();
     renderMarkers();
   }
 }
+
+// ── ZOOM ──
+const ZOOM_MIN = 0.25, ZOOM_MAX = 4, ZOOM_STEP = 0.25;
+
+function zoomIn()    { setZoom(S.zoom + ZOOM_STEP); }
+function zoomOut()   { setZoom(S.zoom - ZOOM_STEP); }
+function resetZoom() { setZoom(1.0); }
+
+function setZoom(z) {
+  S.zoom = Math.round(Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, z)) / ZOOM_STEP) * ZOOM_STEP;
+  applyZoom();
+}
+
+function applyZoom() {
+  const display  = document.getElementById('map-display');
+  const overlay  = document.getElementById('cp-overlay');
+  const levelEl  = document.getElementById('zoom-level');
+  const controls = document.getElementById('zoom-controls');
+
+  if (levelEl)  levelEl.textContent = Math.round(S.zoom * 100) + '%';
+  if (controls) controls.classList.toggle('visible', !!(S.venue && S.floor));
+
+  const img = display.querySelector('img');
+  if (img && img.naturalWidth) {
+    const w = Math.round(img.naturalWidth  * S.zoom);
+    const h = Math.round(img.naturalHeight * S.zoom);
+    img.style.width  = w + 'px';
+    img.style.height = h + 'px';
+    overlay.style.width  = w + 'px';
+    overlay.style.height = h + 'px';
+  }
+
+  const obj = display.querySelector('object');
+  if (obj) {
+    const w = Math.round(1100 * S.zoom);
+    const h = Math.round(780  * S.zoom);
+    obj.setAttribute('width',  w);
+    obj.setAttribute('height', h);
+    overlay.style.width  = w + 'px';
+    overlay.style.height = h + 'px';
+  }
+}
+
+// Mouse-wheel zoom centred on cursor
+document.addEventListener('DOMContentLoaded', () => {
+  const mapArea = document.getElementById('map-area');
+
+  mapArea.addEventListener('wheel', (e) => {
+    if (!S.venue || !S.floor) return;
+    e.preventDefault();
+    const delta    = e.deltaY < 0 ? ZOOM_STEP : -ZOOM_STEP;
+    const oldZoom  = S.zoom;
+    const rect     = mapArea.getBoundingClientRect();
+    const cursorX  = e.clientX - rect.left + mapArea.scrollLeft;
+    const cursorY  = e.clientY - rect.top  + mapArea.scrollTop;
+    setZoom(S.zoom + delta);
+    const scale    = S.zoom / oldZoom;
+    mapArea.scrollLeft = cursorX * scale - (e.clientX - rect.left);
+    mapArea.scrollTop  = cursorY * scale - (e.clientY - rect.top);
+  }, { passive: false });
+
+  // Pinch-to-zoom on touch
+  let lastPinchDist = null;
+  mapArea.addEventListener('touchmove', (e) => {
+    if (e.touches.length !== 2) return;
+    e.preventDefault();
+    const dx   = e.touches[0].clientX - e.touches[1].clientX;
+    const dy   = e.touches[0].clientY - e.touches[1].clientY;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+    if (lastPinchDist !== null) {
+      setZoom(S.zoom + (dist - lastPinchDist) / 300);
+    }
+    lastPinchDist = dist;
+  }, { passive: false });
+  mapArea.addEventListener('touchend', () => { lastPinchDist = null; });
+});
 
 // ── MARKERS ──
 
